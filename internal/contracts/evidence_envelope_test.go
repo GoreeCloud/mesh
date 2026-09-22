@@ -138,7 +138,7 @@ func TestNormalizeEvidenceEnvelopeAllowsMeshGovernanceEvidenceWithoutMakingMeshM
 	v.ID = "mesh-governance-001"
 	v.Producer = EvidenceEnvelopeProducer{
 		System:     MeshProducer,
-		Repository: "GoreeCloud/goreecloud-mesh",
+		Repository: "GoreeCloud/mesh",
 		Revision:   strings.Repeat("c", 40),
 		Contract:   "contracts/mesh.evidence-envelope.schema.json",
 	}
@@ -152,5 +152,25 @@ func TestNormalizeEvidenceEnvelopeAllowsMeshGovernanceEvidenceWithoutMakingMeshM
 	}
 	if IsMandatory(Platform(MeshProducer)) {
 		t.Fatal("Mesh evidence producer must not silently become a mandatory integral-platform acceptance entry")
+	}
+}
+
+func TestNormalizeEvidenceEnvelopeRejectsStaleMeshRepositoryIdentity(t *testing.T) {
+	now := time.Date(2026, time.September, 22, 20, 40, 0, 0, time.UTC)
+	v := validEnvelope(now)
+	v.ID = "mesh-governance-stale-repository-001"
+	v.Producer = EvidenceEnvelopeProducer{
+		System:     MeshProducer,
+		Repository: "GoreeCloud/goreecloud-mesh",
+		Revision:   strings.Repeat("c", 40),
+		Contract:   "contracts/mesh.evidence-envelope.schema.json",
+	}
+	v.AuthorityDomain = "governance"
+	v.Subject = EvidenceEnvelopeSubject{Kind: "contract", ID: EvidenceEnvelopeVersion}
+	v.Assertion = "envelope-validation"
+	v.Outcome = "validated"
+	v.Source = "mesh://contracts/evidence-envelope"
+	if _, err := normalizeEvidenceEnvelopeAt(v, now); err == nil {
+		t.Fatal("expected stale pre-canonical Mesh repository provenance to fail closed")
 	}
 }
