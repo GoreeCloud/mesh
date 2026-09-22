@@ -135,7 +135,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "goreecloud-mesh"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-mesh"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/mesh"}}},
           "authority_domain": {"enum": ["coordination", "governance"]}
         }
       }

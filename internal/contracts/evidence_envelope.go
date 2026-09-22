@@ -65,7 +65,7 @@ type EvidenceEnvelope struct {
 var evidenceDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 var evidenceProducerRepositories = map[EvidenceProducerID]string{
-	MeshProducer:          "GoreeCloud/goreecloud-mesh",
+	MeshProducer:          "GoreeCloud/mesh",
 	IdentityProducer:      "GoreeCloud/goreecloud-identity",
 	GlazeUIProducer:       "GoreeCloud/goreecloud-glaze-ui",
 	WardveilProducer:      "GoreeCloud/goreecloud-wardveil-security",

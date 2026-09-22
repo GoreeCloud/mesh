@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "GoreeCloud Mesh",
-  "repository": "GoreeCloud/goreecloud-mesh",
+  "repository": "GoreeCloud/mesh",
   "development_model": "original-native-goreecloud",
   "lifecycle": "development",
   "stable_eligible": false,
