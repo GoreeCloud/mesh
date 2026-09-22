@@ -1,6 +1,6 @@
 schema_version: '0.4'
 component:
-  type: platform-system
+  type: service
   id: goreecloud-mesh
   product_name: GoreeCloud Mesh
   repository: GoreeCloud/mesh
