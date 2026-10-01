@@ -1,0 +1,43 @@
+/* GoreeCloud Mesh product styling mapped onto GLAZE UI V1.1 Stable roles. */
+html[data-glaze-version="1.1"] {
+  --glaze-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --glaze-canvas: var(--glz1-canvas, #f5f8fa);
+  --glaze-text: var(--glz1-text-primary, #132027);
+  --glaze-muted: var(--glz1-text-secondary, #5c6b73);
+  --glaze-line: var(--glz1-line, rgba(33,55,66,.16));
+  --glaze-surface: var(--glz1-surface, #fff);
+  --glaze-surface-strong: var(--glz1-surface, #fff);
+  --glaze-surface-muted: var(--glz1-surface-muted, color-mix(in srgb, var(--glaze-canvas) 94%, #0f6b6f 6%));
+  --glaze-accent: var(--glz1-accent, #0f6b6f);
+  --glaze-shadow-soft: var(--glz11-shadow-soft, 0 18px 52px rgba(7,20,24,.10));
+  --glaze-shadow-raised: var(--glz11-shadow-soft, 0 18px 52px rgba(7,20,24,.10));
+  --glaze-shadow-overlay: var(--glz11-shadow-float, 0 30px 88px rgba(7,20,24,.16));
+  --glaze-radius-lg: var(--glz11-radius-container, 24px);
+  --glaze-radius-xl: var(--glz11-radius-hero, 32px);
+  --glaze-gutter: 24px;
+  --glaze-blur: 22px;
+}
+html[data-glaze-version="1.1"][data-glz-appearance="dark"],
+html[data-glaze-version="1.1"][data-glz-appearance="deep-dark"] {
+  --glaze-surface-strong: var(--glz1-surface, #101a20);
+  --glaze-surface-muted: color-mix(in srgb, var(--glaze-canvas) 90%, #0f6b6f 10%);
+}
+html[data-glaze-version="1.1"] .solid-card {
+  background: var(--glaze-surface-strong);
+  border-color: var(--glaze-line);
+}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-glaze-version="1.1"] .site-header,
+  html[data-glaze-version="1.1"] .principle-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--glaze-surface-strong) !important;
+  }
+}
+@media print {
+  html[data-glaze-version="1.1"] .site-header { position: static; }
+  html[data-glaze-version="1.1"] .theme-group { display: none; }
+  html[data-glaze-version="1.1"] body { background: white; color: black; }
+  html[data-glaze-version="1.1"] .solid-card,
+  html[data-glaze-version="1.1"] .principle-panel { box-shadow: none; }
+}
