@@ -28,5 +28,7 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
-      - name: Build
-        run: go build ./cmd/mesh
+      - name: Build Mesh and Identity acceptance commands
+        run: |
+          go build ./cmd/mesh
+          go build ./cmd/identity-acceptance

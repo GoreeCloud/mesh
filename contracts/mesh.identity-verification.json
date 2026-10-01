@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "system": "goreecloud-mesh",
   "trusted_issuer": "goreecloud-identity",
   "trusted_audience": "goreecloud-mesh",
@@ -10,7 +10,10 @@
   },
   "identity_issuer": {
     "repository": "GoreeCloud/goreecloud-identity",
-    "implementation": "authentik/goreecloud/mesh_service_token.py",
+    "implementation": "goreecloud_identity/mesh_service_token.py",
+    "native_authority": true,
+    "transitional_authentik_compatibility_module": "authentik/goreecloud/mesh_service_token.py",
+    "transitional_jwks_view": "authentik/goreecloud/mesh_service_token_views.py",
     "tests": "tests/goreecloud/test_mesh_service_token.py",
     "runtime_issuer_implemented": true,
     "jwks_generation_implemented": true,
@@ -22,7 +25,10 @@
     "implementation": "internal/trust/identity_jwt.go",
     "runtime_configuration": "cmd/mesh/main.go",
     "signature_algorithm": "RS256",
-    "key_source": "JWKS",
+    "protected_header_type_required": "JWT",
+    "unsupported_critical_headers_rejected": true,
+    "alternate_or_embedded_key_source_headers_rejected": ["jku", "jwk", "x5u", "x5c"],
+    "key_source": "configured GoreeCloud Identity JWKS only",
     "kid_required": true,
     "issuer_validation": true,
     "audience_validation": true,
@@ -35,6 +41,23 @@
     "scope_extraction": "space-delimited scope claim",
     "unknown_signing_key_refresh": true,
     "fail_closed_without_runtime_configuration": true
+  },
+  "live_acceptance": {
+    "command": "cmd/identity-acceptance",
+    "source_harness_implemented": true,
+    "source_harness_tests_implemented": true,
+    "requires_exact_mesh_revision": true,
+    "requires_exact_identity_revision": true,
+    "requires_deployed_jwks_url": true,
+    "requires_live_identity_issued_service_token": true,
+    "token_file_must_be_owner_only": true,
+    "required_service_id_must_match": true,
+    "required_scopes_must_match": true,
+    "unauthenticated_negative_control_required": true,
+    "credential_may_appear_in_evidence": false,
+    "private_key_material_may_appear_in_evidence": false,
+    "evidence_file_mode": "0600",
+    "live_identity_verifier_acceptance": false
   },
   "principal_requirements": {
     "service_id_required": true,
@@ -53,6 +76,9 @@
     "identity verifier unavailable",
     "credential verification fails",
     "signature or signing key is invalid",
+    "protected header type is missing or is not JWT",
+    "unsupported critical protected headers are present",
+    "credential attempts to select or embed an alternate verification key source",
     "issuer or audience is invalid",
     "temporal claims are invalid",
     "service subject does not match service_id",
@@ -60,6 +86,6 @@
     "required scope is absent",
     "evidence producer does not match verified service identity"
   ],
-  "deployment_boundary": "The GoreeCloud Identity token issuer/JWKS generator and Mesh verifier are implemented. Production acceptance still requires Identity-managed durable private-key storage, a deployed JWKS endpoint, deployed service-token issuance, live key-rotation evidence, and end-to-end producer delivery evidence.",
+  "deployment_boundary": "The native GoreeCloud Identity token issuer/JWKS authority and Mesh verifier are implemented, and Mesh contains a source-controlled live acceptance command. Mesh now fails closed on ambiguous protected-header profiles and does not honor token-selected or embedded key sources. The current Authentik surface is transitional compatibility/integration only. Production acceptance still requires Identity-managed durable private-key storage, a deployed approved JWKS endpoint, deployed service-token issuance, execution of the live acceptance command with a genuine Identity-issued credential, live key-rotation evidence, and end-to-end producer delivery evidence.",
   "production_acceptance": false
 }

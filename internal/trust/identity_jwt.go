@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +22,9 @@ import (
 const (
 	DefaultIdentityIssuer   = "goreecloud-identity"
 	DefaultIdentityAudience = "goreecloud-mesh"
+	minimumIdentityRSABytes = 256
+	minimumIdentityKIDBytes = 8
+	maximumIdentityKIDBytes = 128
 )
 
 type IdentityJWTVerifier struct {
@@ -37,9 +43,14 @@ type IdentityJWTVerifier struct {
 }
 
 type jwtHeader struct {
-	Alg string `json:"alg"`
-	Kid string `json:"kid"`
-	Typ string `json:"typ,omitempty"`
+	Alg  string          `json:"alg"`
+	Kid  string          `json:"kid"`
+	Typ  string          `json:"typ,omitempty"`
+	Crit []string        `json:"crit,omitempty"`
+	JKU  string          `json:"jku,omitempty"`
+	JWK  json.RawMessage `json:"jwk,omitempty"`
+	X5U  string          `json:"x5u,omitempty"`
+	X5C  []string        `json:"x5c,omitempty"`
 }
 
 type identityClaims struct {
@@ -100,8 +111,17 @@ func (v *IdentityJWTVerifier) Verify(r *http.Request) (Principal, error) {
 	if header.Alg != "RS256" {
 		return Principal{}, errors.New("identity token must use RS256")
 	}
-	if strings.TrimSpace(header.Kid) == "" {
-		return Principal{}, errors.New("identity token kid is required")
+	if header.Typ != "JWT" {
+		return Principal{}, errors.New("identity token typ must be JWT")
+	}
+	if len(header.Crit) != 0 {
+		return Principal{}, errors.New("identity token must not use unsupported critical headers")
+	}
+	if strings.TrimSpace(header.JKU) != "" || len(header.JWK) != 0 || strings.TrimSpace(header.X5U) != "" || len(header.X5C) != 0 {
+		return Principal{}, errors.New("identity token must not select or embed alternate verification keys")
+	}
+	if !validIdentityKeyID(header.Kid) {
+		return Principal{}, errors.New("identity token kid is invalid")
 	}
 
 	key, err := v.keyFor(header.Kid, false)
@@ -291,22 +311,34 @@ func (v *IdentityJWTVerifier) keyFor(kid string, force bool) (*rsa.PublicKey, er
 }
 
 func (v *IdentityJWTVerifier) refreshKeysLocked() error {
+	jwksURL, err := validateIdentityJWKSURL(v.JWKSURL)
+	if err != nil {
+		return err
+	}
 	client := v.Client
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
-	req, err := http.NewRequest(http.MethodGet, strings.TrimSpace(v.JWKSURL), nil)
+	clientCopy := *client
+	clientCopy.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	req, err := http.NewRequest(http.MethodGet, jwksURL, nil)
 	if err != nil {
 		return errors.New("identity JWKS URL is invalid")
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
+	resp, err := clientCopy.Do(req)
 	if err != nil {
 		return errors.New("identity JWKS retrieval failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("identity JWKS retrieval returned HTTP %d", resp.StatusCode)
+	}
+	mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		return errors.New("identity JWKS response must use application/json")
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
@@ -318,7 +350,7 @@ func (v *IdentityJWTVerifier) refreshKeysLocked() error {
 	}
 	keys := make(map[string]*rsa.PublicKey)
 	for _, item := range doc.Keys {
-		if item.KTY != "RSA" || strings.TrimSpace(item.Kid) == "" || item.N == "" || item.E == "" {
+		if item.KTY != "RSA" || !validIdentityKeyID(item.Kid) || item.N == "" || item.E == "" {
 			continue
 		}
 		if item.Alg != "" && item.Alg != "RS256" {
@@ -331,6 +363,9 @@ func (v *IdentityJWTVerifier) refreshKeysLocked() error {
 		if err != nil {
 			continue
 		}
+		if _, exists := keys[item.Kid]; exists {
+			return errors.New("identity JWKS contains a duplicate signing key id")
+		}
 		keys[item.Kid] = key
 	}
 	if len(keys) == 0 {
@@ -341,10 +376,52 @@ func (v *IdentityJWTVerifier) refreshKeysLocked() error {
 	return nil
 }
 
+func validateIdentityJWKSURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Hostname() == "" {
+		return "", errors.New("identity JWKS URL is invalid")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("identity JWKS URL must not contain credentials, query, or fragment")
+	}
+	if parsed.Scheme == "https" {
+		return parsed.String(), nil
+	}
+	if parsed.Scheme != "http" || !isLoopbackHostname(parsed.Hostname()) {
+		return "", errors.New("identity JWKS URL must use HTTPS except for loopback testing")
+	}
+	return parsed.String(), nil
+}
+
+func isLoopbackHostname(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func validIdentityKeyID(kid string) bool {
+	if len(kid) < minimumIdentityKIDBytes || len(kid) > maximumIdentityKIDBytes {
+		return false
+	}
+	for _, char := range kid {
+		if (char >= 'A' && char <= 'Z') ||
+			(char >= 'a' && char <= 'z') ||
+			(char >= '0' && char <= '9') ||
+			char == '.' || char == '_' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func rsaKey(nEncoded, eEncoded string) (*rsa.PublicKey, error) {
 	nBytes, err := base64.RawURLEncoding.DecodeString(nEncoded)
-	if err != nil || len(nBytes) == 0 {
-		return nil, errors.New("invalid RSA modulus")
+	if err != nil || len(nBytes) < minimumIdentityRSABytes {
+		return nil, errors.New("invalid or weak RSA modulus")
 	}
 	eBytes, err := base64.RawURLEncoding.DecodeString(eEncoded)
 	if err != nil || len(eBytes) == 0 || len(eBytes) > 4 {
@@ -354,8 +431,12 @@ func rsaKey(nEncoded, eEncoded string) (*rsa.PublicKey, error) {
 	for _, b := range eBytes {
 		e = e<<8 | int(b)
 	}
-	if e < 3 {
+	if e < 3 || e%2 == 0 {
 		return nil, errors.New("invalid RSA exponent")
 	}
-	return &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: e}, nil
+	key := &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: e}
+	if key.N.BitLen() < minimumIdentityRSABytes*8 {
+		return nil, errors.New("invalid or weak RSA modulus")
+	}
+	return key, nil
 }
