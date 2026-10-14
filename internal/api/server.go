@@ -402,6 +402,57 @@ func (s *Server) recoveryReadiness(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ready": s.recovery.Ready(now), "required_dimensions": governance.RequiredRecoveryDimensions(), "evidence": s.recovery.List()})
 }
 
+// rejectDuplicateJSONKeys prevents ambiguous producer input where Go's
+// default JSON decoder would otherwise keep the last repeated object field.
+func rejectDuplicateJSONKeys(raw []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	return walkJSONObjectKeys(dec)
+}
+
+func walkJSONObjectKeys(dec *json.Decoder) error {
+	token, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for dec.More() {
+			keyToken, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("JSON object key must be a string")
+			}
+			if _, exists := seen[key]; exists {
+				return errors.New("duplicate JSON object key")
+			}
+			seen[key] = struct{}{}
+			if err := walkJSONObjectKeys(dec); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token()
+		return err
+	case '[':
+		for dec.More() {
+			if err := walkJSONObjectKeys(dec); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token()
+		return err
+	default:
+		return errors.New("unexpected JSON delimiter")
+	}
+}
+
 func decodeJSON(r *http.Request, dst any) error {
 	defer r.Body.Close()
 	const maxBodyBytes = 1 << 20
@@ -411,6 +462,9 @@ func decodeJSON(r *http.Request, dst any) error {
 	}
 	if len(body) > maxBodyBytes {
 		return errors.New("JSON request exceeds size limit")
+	}
+	if err := rejectDuplicateJSONKeys(body); err != nil {
+		return err
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
