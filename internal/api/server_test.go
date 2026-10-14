@@ -51,6 +51,7 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 		`{"id":"a"}{"id":"b"}`,
 		`{"id":"a"} true`,
 		`{"id":"a"} garbage`,
+		`{"id":"one","id":"two"}`,
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString(body))
 		var value struct {
@@ -58,6 +59,23 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 		}
 		if err := decodeJSON(req, &value); err == nil {
 			t.Fatalf("accepted ambiguous request body: %q", body)
+		}
+	}
+
+	for _, body := range []string{
+		`{"a":{"role":1,"role":2}}`,
+		`{"a":[{"mode":true,"mode":false}]}`,
+	} {
+		if err := rejectDuplicateJSONKeys([]byte(body)); err == nil {
+			t.Fatalf("nested duplicate JSON key was accepted: %s", body)
+		}
+	}
+	for _, body := range []string{
+		`{"a":{"role":"viewer"},"b":[{"mode":true},{"mode":false}]}`,
+		`{"id":"valid"}`,
+	} {
+		if err := rejectDuplicateJSONKeys([]byte(body)); err != nil {
+			t.Fatalf("valid nested JSON was rejected: %s err=%v", body, err)
 		}
 	}
 
