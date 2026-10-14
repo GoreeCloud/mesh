@@ -53,7 +53,9 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 		`{"id":"a"} garbage`,
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString(body))
-		var value struct { ID string `json:"id"` }
+		var value struct {
+			ID string `json:"id"`
+		}
 		if err := decodeJSON(req, &value); err == nil {
 			t.Fatalf("accepted ambiguous request body: %q", body)
 		}
@@ -61,7 +63,9 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 
 	oversized := append([]byte(`{"id":"a"}`), bytes.Repeat([]byte(" "), 1<<20)...)
 	req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewReader(oversized))
-	var value struct { ID string `json:"id"` }
+	var value struct {
+		ID string `json:"id"`
+	}
 	if err := decodeJSON(req, &value); err == nil {
 		t.Fatal("accepted body exceeding the one-megabyte bound")
 	}
