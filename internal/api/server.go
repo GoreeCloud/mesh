@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -403,9 +404,26 @@ func (s *Server) recoveryReadiness(w http.ResponseWriter, _ *http.Request) {
 
 func decodeJSON(r *http.Request, dst any) error {
 	defer r.Body.Close()
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	const maxBodyBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(body) > maxBodyBytes {
+		return errors.New("JSON request exceeds size limit")
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	// A second JSON document, even after a valid first document, is not
+	// authoritative API input. Ensure the entire bounded body was consumed.
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values are not permitted")
+		}
 		return err
 	}
 	return nil
