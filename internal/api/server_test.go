@@ -46,6 +46,32 @@ func testHandler(t *testing.T) http.Handler {
 	return NewAuthorized(mesh.New(state), contracts.NewRegistry(), contracts.NewSourceAttestationRegistry(), verifier, nil)
 }
 
+func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
+	for _, body := range []string{
+		`{"id":"a"}{"id":"b"}`,
+		`{"id":"a"} true`,
+		`{"id":"a"} garbage`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString(body))
+		var value struct { ID string `json:"id"` }
+		if err := decodeJSON(req, &value); err == nil {
+			t.Fatalf("accepted ambiguous request body: %q", body)
+		}
+	}
+
+	oversized := append([]byte(`{"id":"a"}`), bytes.Repeat([]byte(" "), 1<<20)...)
+	req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewReader(oversized))
+	var value struct { ID string `json:"id"` }
+	if err := decodeJSON(req, &value); err == nil {
+		t.Fatal("accepted body exceeding the one-megabyte bound")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString("{\"id\":\"valid\"}  \n"))
+	if err := decodeJSON(req, &value); err != nil || value.ID != "valid" {
+		t.Fatalf("valid single request rejected: id=%q err=%v", value.ID, err)
+	}
+}
+
 func TestPlatformCatalogAPI(t *testing.T) {
 	h := testHandler(t)
 	request := httptest.NewRequest(http.MethodGet, "/v1/platforms", nil)
