@@ -25,3 +25,7 @@ Current source includes:
 
 The Registry/Graph/Policy/Event code must be decomposed or reclassified through controlled migrations where its current responsibilities exceed the adopted Mesh connectivity/reachability role. Existing source code is evidence of implementation history, not permission to override the Integral Platform architecture.
 
+
+## Development API request framing guard
+
+The Development API JSON decoder now enforces a complete, single-document request body with a one-megabyte maximum, including chunked/unknown-length bodies. Extra JSON values, non-whitespace trailing content and oversized request bodies fail validation before changing registered state. This is source-level input hardening, not a claim that the Mesh Identity provider, production perimeter, rate limits or runtime security controls are qualified.
