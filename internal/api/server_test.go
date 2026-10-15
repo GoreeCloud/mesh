@@ -146,6 +146,35 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 	}
 }
 
+func TestInvalidJSONNeverRegistersService(t *testing.T) {
+	handler := testHandler(t)
+	getServices := func() string {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/services", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("list services failed: %d", response.Code)
+		}
+		return response.Body.String()
+	}
+	before := getServices()
+	for _, body := range []string{
+		`{"id":"safe","ID":"hijacked"}`,
+		`{"id":"safe"}{"id":"extra"}`,
+		`{"id":"safe","details":{"role":"viewer","ROLE":"admin"}}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/v1/services", strings.NewReader(body))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid JSON accepted: status=%d body=%q", response.Code, body)
+		}
+		if after := getServices(); after != before {
+			t.Fatalf("rejected input mutated services: before=%q after=%q", before, after)
+		}
+	}
+}
+
 func TestPlatformCatalogAPI(t *testing.T) {
 	h := testHandler(t)
 	request := httptest.NewRequest(http.MethodGet, "/v1/platforms", nil)
