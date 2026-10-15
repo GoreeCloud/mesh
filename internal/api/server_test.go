@@ -175,6 +175,26 @@ func TestInvalidJSONNeverRegistersService(t *testing.T) {
 	}
 }
 
+func TestHealthCannotBeMistakenForProductionApproval(t *testing.T) {
+	handler := testHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected health status: %d", rec.Code)
+	}
+	var got struct {
+		Scope              string `json:"scope"`
+		ProductionAccepted bool   `json:"production_accepted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ProductionAccepted || got.Scope != "development-integration" {
+		t.Fatalf("health endpoint overstates acceptance: %+v", got)
+	}
+}
+
 func TestPlatformCatalogAPI(t *testing.T) {
 	h := testHandler(t)
 	request := httptest.NewRequest(http.MethodGet, "/v1/platforms", nil)
