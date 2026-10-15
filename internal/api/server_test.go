@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,29 @@ func testHandler(t *testing.T) http.Handler {
 		},
 	}}
 	return NewAuthorized(mesh.New(state), contracts.NewRegistry(), contracts.NewSourceAttestationRegistry(), verifier, nil)
+}
+
+func TestRequestLogRedactsPathIdentifiers(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := requestLog(logger, mux)
+	const sensitiveID = "synthetic-private-identifier"
+	request := httptest.NewRequest(http.MethodGet, "/v1/items/"+sensitiveID, nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected HTTP status: %d", response.Code)
+	}
+	if strings.Contains(logs.String(), sensitiveID) {
+		t.Fatal("request log disclosed a URL path identifier")
+	}
+	if !strings.Contains(logs.String(), "GET /v1/items/{id}") {
+		t.Fatalf("missing route pattern in request log: %s", logs.String())
+	}
 }
 
 func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
