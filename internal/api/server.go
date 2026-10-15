@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/GoreeCloud/goreecloud-mesh/internal/contracts"
 	"github.com/GoreeCloud/goreecloud-mesh/internal/governance"
@@ -402,6 +404,29 @@ func (s *Server) recoveryReadiness(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ready": s.recovery.Ready(now), "required_dimensions": governance.RequiredRecoveryDimensions(), "evidence": s.recovery.List()})
 }
 
+// foldedJSONKey uses the same case-fold equivalence as encoding/json struct
+// field matching, so "id", "ID" and Unicode fold variants cannot overwrite
+// each other after passing the duplicate-field guard.
+func foldedJSONKey(key string) string {
+	var folded strings.Builder
+	folded.Grow(len(key))
+	for _, r := range key {
+		if 'a' <= r && r <= 'z' {
+			r -= 'a' - 'A'
+		} else if r >= utf8.RuneSelf {
+			for {
+				next := unicode.SimpleFold(r)
+				if next <= r {
+					break
+				}
+				r = next
+			}
+		}
+		folded.WriteRune(r)
+	}
+	return folded.String()
+}
+
 // rejectDuplicateJSONKeys prevents ambiguous producer input where Go's
 // default JSON decoder would otherwise keep the last repeated object field.
 func rejectDuplicateJSONKeys(raw []byte) error {
@@ -430,10 +455,11 @@ func walkJSONObjectKeys(dec *json.Decoder) error {
 			if !ok {
 				return errors.New("JSON object key must be a string")
 			}
-			if _, exists := seen[key]; exists {
+			foldedKey := foldedJSONKey(key)
+			if _, exists := seen[foldedKey]; exists {
 				return errors.New("duplicate JSON object key")
 			}
-			seen[key] = struct{}{}
+			seen[foldedKey] = struct{}{}
 			if err := walkJSONObjectKeys(dec); err != nil {
 				return err
 			}
