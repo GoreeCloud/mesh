@@ -31,3 +31,7 @@ The Registry/Graph/Policy/Event code must be decomposed or reclassified through 
 The Development API JSON decoder now enforces a complete, single-document request body with a one-megabyte maximum, including chunked/unknown-length bodies. Extra JSON values, non-whitespace trailing content and oversized request bodies fail validation before changing registered state. This is source-level input hardening, not a claim that the Mesh Identity provider, production perimeter, rate limits or runtime security controls are qualified.
 
 Second-pass solo-maintainer audit: JSON decoding also rejects case-fold-equivalent field names (including Unicode aliases) and array/object nesting beyond 128 levels. These bounds apply prior to decoding or modifying state; tests include negative and positive cases. No production trust or independent human approval is asserted.
+
+### Concurrent stabilization audit — 2026-10-15
+
+Solo-maintainer privacy audit: request access logs now emit matched route patterns rather than raw request URLs, preventing path identifiers from being retained. A synthetic route-param regression covers the no-leak invariant.
