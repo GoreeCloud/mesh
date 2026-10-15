@@ -417,6 +417,7 @@ func foldedJSONKey(key string) string {
 			for {
 				next := unicode.SimpleFold(r)
 				if next <= r {
+					r = next
 					break
 				}
 				r = next
