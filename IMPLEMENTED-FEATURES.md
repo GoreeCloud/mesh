@@ -29,3 +29,5 @@ The Registry/Graph/Policy/Event code must be decomposed or reclassified through 
 ## Development API request framing guard
 
 The Development API JSON decoder now enforces a complete, single-document request body with a one-megabyte maximum, including chunked/unknown-length bodies. Extra JSON values, non-whitespace trailing content and oversized request bodies fail validation before changing registered state. This is source-level input hardening, not a claim that the Mesh Identity provider, production perimeter, rate limits or runtime security controls are qualified.
+
+Second-pass solo-maintainer audit: JSON decoding also rejects case-fold-equivalent field names (including Unicode aliases) and array/object nesting beyond 128 levels. These bounds apply prior to decoding or modifying state; tests include negative and positive cases. No production trust or independent human approval is asserted.
