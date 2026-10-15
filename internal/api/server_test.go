@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +84,26 @@ func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
 	} {
 		if err := rejectDuplicateJSONKeys([]byte(body)); err != nil {
 			t.Fatalf("valid nested JSON was rejected: %s err=%v", body, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		depth int
+		ok    bool
+	}{
+		{depth: maxJSONDepth, ok: true},
+		{depth: maxJSONDepth + 1, ok: false},
+	} {
+		nestedArray := strings.Repeat("[", tc.depth) + "0" + strings.Repeat("]", tc.depth)
+		nestedObject := strings.Repeat("{\"a\":", tc.depth) + "0" + strings.Repeat("}", tc.depth)
+		for _, body := range []string{nestedArray, nestedObject} {
+			err := rejectDuplicateJSONKeys([]byte(body))
+			if tc.ok && err != nil {
+				t.Fatalf("rejected bounded JSON nesting: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted overly deep JSON nesting")
+			}
 		}
 	}
 
