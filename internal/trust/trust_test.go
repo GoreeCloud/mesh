@@ -12,7 +12,7 @@ func TestValidateRequiresIdentityAndIssuer(t *testing.T) {
 	if err := Validate(Principal{ServiceID: "goreecloud-manager"}); err == nil {
 		t.Fatal("principal without issuer must be rejected")
 	}
-	if err := Validate(Principal{ServiceID: "goreecloud-manager", Issuer: "goreecloud-identity"}); err != nil {
+	if err := Validate(Principal{ServiceID: "goreecloud-manager", Issuer: "goreecloud-identity", Subject: "service:goreecloud-manager"}); err != nil {
 		t.Fatalf("valid principal rejected: %v", err)
 	}
 }
