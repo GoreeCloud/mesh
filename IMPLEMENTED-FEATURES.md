@@ -43,3 +43,7 @@ A synthetic API-level regression checks that malformed, case-aliased or multiple
 ### Development-to-production status boundary — 2026-10-15
 
 Development Mesh /healthz reports `scope: development-integration` and `production_accepted: false`, even if the local process is healthy. This is a source-level health contract, not real Identity issuer, Policy authorization or deployment acceptance.
+
+### Service-subject consistency review — 2026-10-15
+
+A service-scoped verified principal must contain a `subject` equal to `service:` plus the normalized `service_id`. Missing, mismatched and non-service subjects fail validation before scope authorization. The negative/positive Go regression was verified by Mesh CI on commit `afdff173b2ab3a25045c2912223876e4d6218293`. This is a Development trust-boundary check and does not establish production Identity token issuance or verified signatures.
