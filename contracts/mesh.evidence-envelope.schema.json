@@ -144,7 +144,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "goreecloud-identity"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-identity"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/identity"}}},
           "authority_domain": {
             "enum": [
               "identity",
@@ -164,7 +164,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "glaze-ui"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-glaze-ui"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/glaze"}}},
           "authority_domain": {"enum": ["presentation", "design-conformance"]}
         }
       }
@@ -173,7 +173,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "wardveil-security"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-wardveil-security"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/wardveil"}}},
           "authority_domain": {"const": "security"}
         }
       }
@@ -182,7 +182,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "privacy-shield"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-privacy-shield"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/privacy-shield"}}},
           "authority_domain": {"const": "privacy"}
         }
       }
@@ -191,7 +191,7 @@
       "if": {"properties": {"producer": {"properties": {"system": {"const": "everkeep"}}}}},
       "then": {
         "properties": {
-          "producer": {"properties": {"repository": {"const": "GoreeCloud/goreecloud-everkeep"}}},
+          "producer": {"properties": {"repository": {"const": "GoreeCloud/everkeep"}}},
           "authority_domain": {"enum": ["resilience", "recovery", "preservation", "continuity"]}
         }
       }
