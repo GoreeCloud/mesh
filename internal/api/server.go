@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/GoreeCloud/goreecloud-mesh/internal/contracts"
 	"github.com/GoreeCloud/goreecloud-mesh/internal/governance"
@@ -88,7 +91,7 @@ func NewAuthorizedWithRecoveryAndEvidence(m *mesh.Mesh, registry *contracts.Regi
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goreecloud-mesh"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goreecloud-mesh", "scope": "development-integration", "production_accepted": false})
 }
 func (s *Server) state(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.mesh.State())
@@ -401,11 +404,112 @@ func (s *Server) recoveryReadiness(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ready": s.recovery.Ready(now), "required_dimensions": governance.RequiredRecoveryDimensions(), "evidence": s.recovery.List()})
 }
 
+// foldedJSONKey uses the same case-fold equivalence as encoding/json struct
+// field matching, so "id", "ID" and Unicode fold variants cannot overwrite
+// each other after passing the duplicate-field guard.
+func foldedJSONKey(key string) string {
+	var folded strings.Builder
+	folded.Grow(len(key))
+	for _, r := range key {
+		if 'a' <= r && r <= 'z' {
+			r -= 'a' - 'A'
+		} else if r >= utf8.RuneSelf {
+			for {
+				next := unicode.SimpleFold(r)
+				if next <= r {
+					r = next
+					break
+				}
+				r = next
+			}
+		}
+		folded.WriteRune(r)
+	}
+	return folded.String()
+}
+
+// rejectDuplicateJSONKeys prevents ambiguous producer input where Go's
+// default JSON decoder would otherwise keep the last repeated object field.
+func rejectDuplicateJSONKeys(raw []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	return walkJSONObjectKeys(dec, 0)
+}
+
+const maxJSONDepth = 128
+
+func walkJSONObjectKeys(dec *json.Decoder, depth int) error {
+	if depth > maxJSONDepth {
+		return errors.New("JSON nesting exceeds depth limit")
+	}
+	token, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := make(map[string]struct{})
+		for dec.More() {
+			keyToken, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("JSON object key must be a string")
+			}
+			foldedKey := foldedJSONKey(key)
+			if _, exists := seen[foldedKey]; exists {
+				return errors.New("duplicate JSON object key")
+			}
+			seen[foldedKey] = struct{}{}
+			if err := walkJSONObjectKeys(dec, depth+1); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token()
+		return err
+	case '[':
+		for dec.More() {
+			if err := walkJSONObjectKeys(dec, depth+1); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token()
+		return err
+	default:
+		return errors.New("unexpected JSON delimiter")
+	}
+}
+
 func decodeJSON(r *http.Request, dst any) error {
 	defer r.Body.Close()
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	const maxBodyBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(body) > maxBodyBytes {
+		return errors.New("JSON request exceeds size limit")
+	}
+	if err := rejectDuplicateJSONKeys(body); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	// A second JSON document, even after a valid first document, is not
+	// authoritative API input. Ensure the entire bounded body was consumed.
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values are not permitted")
+		}
 		return err
 	}
 	return nil
@@ -426,6 +530,10 @@ func requestLog(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		logger.Info("request", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(start).Milliseconds())
+		route := r.Pattern
+		if route == "" {
+			route = "unmatched"
+		}
+		logger.Info("request", "method", r.Method, "route", route, "duration_ms", time.Since(start).Milliseconds())
 	})
 }

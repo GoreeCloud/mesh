@@ -12,8 +12,21 @@ func TestValidateRequiresIdentityAndIssuer(t *testing.T) {
 	if err := Validate(Principal{ServiceID: "goreecloud-manager"}); err == nil {
 		t.Fatal("principal without issuer must be rejected")
 	}
-	if err := Validate(Principal{ServiceID: "goreecloud-manager", Issuer: "goreecloud-identity"}); err != nil {
+	if err := Validate(Principal{ServiceID: "goreecloud-manager", Issuer: "goreecloud-identity", Subject: "service:goreecloud-manager"}); err != nil {
 		t.Fatalf("valid principal rejected: %v", err)
+	}
+}
+
+func TestSubjectMustMatchVerifiedServiceIdentity(t *testing.T) {
+	for _, subject := range []string{"", "service:unrelated", "user:client"} {
+		p := Principal{ServiceID: "client", Issuer: "goreecloud-identity", Subject: subject}
+		if err := Validate(p); err == nil {
+			t.Fatalf("unbound service subject %q was accepted", subject)
+		}
+	}
+	good := Principal{ServiceID: " client ", Issuer: " goreecloud-identity ", Subject: " service:client "}
+	if err := Validate(good); err != nil {
+		t.Fatalf("matching normalized service subject was rejected: %v", err)
 	}
 }
 

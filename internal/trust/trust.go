@@ -51,6 +51,15 @@ func Validate(p Principal) error {
 	if p.Issuer == "" {
 		return errors.New("identity issuer is required")
 	}
+	// Mesh service scopes are tied to a single, verified service subject.
+	// A verifier must not authorize a principal whose claimed service and
+	// subject identify different services.
+	if p.Subject == "" {
+		return errors.New("service subject is required")
+	}
+	if p.Subject != "service:"+p.ServiceID {
+		return errors.New("service subject does not match service identity")
+	}
 	return nil
 }
 

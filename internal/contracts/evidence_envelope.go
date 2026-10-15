@@ -66,11 +66,11 @@ var evidenceDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 var evidenceProducerRepositories = map[EvidenceProducerID]string{
 	MeshProducer:          "GoreeCloud/mesh",
-	IdentityProducer:      "GoreeCloud/goreecloud-identity",
-	GlazeUIProducer:       "GoreeCloud/goreecloud-glaze-ui",
-	WardveilProducer:      "GoreeCloud/goreecloud-wardveil-security",
-	PrivacyShieldProducer: "GoreeCloud/goreecloud-privacy-shield",
-	EverkeepProducer:      "GoreeCloud/goreecloud-everkeep",
+	IdentityProducer:      "GoreeCloud/identity",
+	GlazeUIProducer:       "GoreeCloud/glaze",
+	WardveilProducer:      "GoreeCloud/wardveil",
+	PrivacyShieldProducer: "GoreeCloud/privacy-shield",
+	EverkeepProducer:      "GoreeCloud/everkeep",
 }
 
 var evidenceAuthorityDomains = map[EvidenceProducerID]map[string]bool{

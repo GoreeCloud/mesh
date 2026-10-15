@@ -25,3 +25,25 @@ Current source includes:
 
 The Registry/Graph/Policy/Event code must be decomposed or reclassified through controlled migrations where its current responsibilities exceed the adopted Mesh connectivity/reachability role. Existing source code is evidence of implementation history, not permission to override the Integral Platform architecture.
 
+
+## Development API request framing guard
+
+The Development API JSON decoder now enforces a complete, single-document request body with a one-megabyte maximum, including chunked/unknown-length bodies. Extra JSON values, non-whitespace trailing content and oversized request bodies fail validation before changing registered state. This is source-level input hardening, not a claim that the Mesh Identity provider, production perimeter, rate limits or runtime security controls are qualified.
+
+Second-pass solo-maintainer audit: JSON decoding also rejects case-fold-equivalent field names (including Unicode aliases) and array/object nesting beyond 128 levels. These bounds apply prior to decoding or modifying state; tests include negative and positive cases. No production trust or independent human approval is asserted.
+
+### Concurrent stabilization audit — 2026-10-15
+
+Solo-maintainer privacy audit: request access logs now emit matched route patterns rather than raw request URLs, preventing path identifiers from being retained. A synthetic route-param regression covers the no-leak invariant.
+
+### Source-stabilization checkpoint — 2026-10-15
+
+A synthetic API-level regression checks that malformed, case-aliased or multiple-document JSON bodies cannot register services. Exact-source Mesh CI passed. This does not verify production Identity issuance or service persistence.
+
+### Development-to-production status boundary — 2026-10-15
+
+Development Mesh /healthz reports `scope: development-integration` and `production_accepted: false`, even if the local process is healthy. This is a source-level health contract, not real Identity issuer, Policy authorization or deployment acceptance.
+
+### Service-subject consistency review — 2026-10-15
+
+A service-scoped verified principal must contain a `subject` equal to `service:` plus the normalized `service_id`. Missing, mismatched and non-service subjects fail validation before scope authorization. The negative/positive Go regression was verified by Mesh CI on commit `afdff173b2ab3a25045c2912223876e4d6218293`. This is a Development trust-boundary check and does not establish production Identity token issuance or verified signatures.

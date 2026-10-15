@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +46,153 @@ func testHandler(t *testing.T) http.Handler {
 		},
 	}}
 	return NewAuthorized(mesh.New(state), contracts.NewRegistry(), contracts.NewSourceAttestationRegistry(), verifier, nil)
+}
+
+func TestRequestLogRedactsPathIdentifiers(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := requestLog(logger, mux)
+	const sensitiveID = "synthetic-private-identifier"
+	request := httptest.NewRequest(http.MethodGet, "/v1/items/"+sensitiveID, nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected HTTP status: %d", response.Code)
+	}
+	if strings.Contains(logs.String(), sensitiveID) {
+		t.Fatal("request log disclosed a URL path identifier")
+	}
+	if !strings.Contains(logs.String(), "GET /v1/items/{id}") {
+		t.Fatalf("missing route pattern in request log: %s", logs.String())
+	}
+}
+
+func TestDecodeJSONStrictBodyBoundaries(t *testing.T) {
+	for _, body := range []string{
+		`{"id":"a"}{"id":"b"}`,
+		`{"id":"a"} true`,
+		`{"id":"a"} garbage`,
+		`{"id":"one","id":"two"}`,
+		`{"id":"one","ID":"two"}`,
+		`{"id":"one","Id":"two"}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString(body))
+		var value struct {
+			ID string `json:"id"`
+		}
+		if err := decodeJSON(req, &value); err == nil {
+			t.Fatalf("accepted ambiguous request body: %q", body)
+		}
+	}
+
+	for _, body := range []string{
+		`{"a":{"role":1,"role":2}}`,
+		`{"a":[{"mode":true,"mode":false}]}`,
+		`{"a":{"role":1,"ROLE":2}}`,
+		`{"outer":[{"flag":true,"FLAG":false}]}`,
+		`{"K":1,"K":2}`,
+		`{"s":1,"ſ":2}`,
+	} {
+		if err := rejectDuplicateJSONKeys([]byte(body)); err == nil {
+			t.Fatalf("nested duplicate JSON key was accepted: %s", body)
+		}
+	}
+	for _, body := range []string{
+		`{"a":{"role":"viewer"},"b":[{"mode":true},{"mode":false}]}`,
+		`{"id":"valid"}`,
+		`{"id":"valid","identity":"distinct"}`,
+	} {
+		if err := rejectDuplicateJSONKeys([]byte(body)); err != nil {
+			t.Fatalf("valid nested JSON was rejected: %s err=%v", body, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		depth int
+		ok    bool
+	}{
+		{depth: maxJSONDepth, ok: true},
+		{depth: maxJSONDepth + 1, ok: false},
+	} {
+		nestedArray := strings.Repeat("[", tc.depth) + "0" + strings.Repeat("]", tc.depth)
+		nestedObject := strings.Repeat("{\"a\":", tc.depth) + "0" + strings.Repeat("}", tc.depth)
+		for _, body := range []string{nestedArray, nestedObject} {
+			err := rejectDuplicateJSONKeys([]byte(body))
+			if tc.ok && err != nil {
+				t.Fatalf("rejected bounded JSON nesting: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted overly deep JSON nesting")
+			}
+		}
+	}
+
+	oversized := append([]byte(`{"id":"a"}`), bytes.Repeat([]byte(" "), 1<<20)...)
+	req := httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewReader(oversized))
+	var value struct {
+		ID string `json:"id"`
+	}
+	if err := decodeJSON(req, &value); err == nil {
+		t.Fatal("accepted body exceeding the one-megabyte bound")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/services", bytes.NewBufferString("{\"id\":\"valid\"}  \n"))
+	if err := decodeJSON(req, &value); err != nil || value.ID != "valid" {
+		t.Fatalf("valid single request rejected: id=%q err=%v", value.ID, err)
+	}
+}
+
+func TestInvalidJSONNeverRegistersService(t *testing.T) {
+	handler := testHandler(t)
+	getServices := func() string {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/services", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("list services failed: %d", response.Code)
+		}
+		return response.Body.String()
+	}
+	before := getServices()
+	for _, body := range []string{
+		`{"id":"safe","ID":"hijacked"}`,
+		`{"id":"safe"}{"id":"extra"}`,
+		`{"id":"safe","details":{"role":"viewer","ROLE":"admin"}}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/v1/services", strings.NewReader(body))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid JSON accepted: status=%d body=%q", response.Code, body)
+		}
+		if after := getServices(); after != before {
+			t.Fatalf("rejected input mutated services: before=%q after=%q", before, after)
+		}
+	}
+}
+
+func TestHealthCannotBeMistakenForProductionApproval(t *testing.T) {
+	handler := testHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected health status: %d", rec.Code)
+	}
+	var got struct {
+		Scope              string `json:"scope"`
+		ProductionAccepted bool   `json:"production_accepted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ProductionAccepted || got.Scope != "development-integration" {
+		t.Fatalf("health endpoint overstates acceptance: %+v", got)
+	}
 }
 
 func TestPlatformCatalogAPI(t *testing.T) {
