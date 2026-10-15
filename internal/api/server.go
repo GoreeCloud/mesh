@@ -432,10 +432,15 @@ func foldedJSONKey(key string) string {
 // default JSON decoder would otherwise keep the last repeated object field.
 func rejectDuplicateJSONKeys(raw []byte) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	return walkJSONObjectKeys(dec)
+	return walkJSONObjectKeys(dec, 0)
 }
 
-func walkJSONObjectKeys(dec *json.Decoder) error {
+const maxJSONDepth = 128
+
+func walkJSONObjectKeys(dec *json.Decoder, depth int) error {
+	if depth > maxJSONDepth {
+		return errors.New("JSON nesting exceeds depth limit")
+	}
 	token, err := dec.Token()
 	if err != nil {
 		return err
@@ -461,7 +466,7 @@ func walkJSONObjectKeys(dec *json.Decoder) error {
 				return errors.New("duplicate JSON object key")
 			}
 			seen[foldedKey] = struct{}{}
-			if err := walkJSONObjectKeys(dec); err != nil {
+			if err := walkJSONObjectKeys(dec, depth+1); err != nil {
 				return err
 			}
 		}
@@ -469,7 +474,7 @@ func walkJSONObjectKeys(dec *json.Decoder) error {
 		return err
 	case '[':
 		for dec.More() {
-			if err := walkJSONObjectKeys(dec); err != nil {
+			if err := walkJSONObjectKeys(dec, depth+1); err != nil {
 				return err
 			}
 		}
