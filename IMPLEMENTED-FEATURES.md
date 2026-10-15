@@ -35,3 +35,7 @@ Second-pass solo-maintainer audit: JSON decoding also rejects case-fold-equivale
 ### Concurrent stabilization audit — 2026-10-15
 
 Solo-maintainer privacy audit: request access logs now emit matched route patterns rather than raw request URLs, preventing path identifiers from being retained. A synthetic route-param regression covers the no-leak invariant.
+
+### Source-stabilization checkpoint — 2026-10-15
+
+A synthetic API-level regression checks that malformed, case-aliased or multiple-document JSON bodies cannot register services. Exact-source Mesh CI passed. This does not verify production Identity issuance or service persistence.
