@@ -91,7 +91,7 @@ func NewAuthorizedWithRecoveryAndEvidence(m *mesh.Mesh, registry *contracts.Regi
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goreecloud-mesh"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goreecloud-mesh", "scope": "development-integration", "production_accepted": false})
 }
 func (s *Server) state(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.mesh.State())
