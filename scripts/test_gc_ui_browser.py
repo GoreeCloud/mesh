@@ -61,6 +61,39 @@ def run() -> list[dict]:
                 page.get_by_role("button", name="Light").click()
                 light = page.locator("body").evaluate("el => getComputedStyle(el).backgroundColor")
                 assert dark != light, name + " theme did not alter computed background"
+                # Inspect computed GC UI semantic text colors in both explicit modes.
+                # This tests selected supported source roles, not whole-page WCAG.
+                contrast_ratios = []
+                for mode in ("light", "dark"):
+                    page.get_by_role("button", name=mode.capitalize()).click()
+                    ratios = page.evaluate("""() => {
+                        const root = getComputedStyle(document.documentElement);
+                        const rgb = role => {
+                            const raw = root.getPropertyValue(role).trim();
+                            const hex = /^#[0-9a-f]{3}$/i.test(raw)
+                                ? '#' + [...raw.slice(1)].map(ch => ch + ch).join('') : raw;
+                            if (!/^#[0-9a-f]{6}$/i.test(hex)) throw Error('invalid role: ' + role);
+                            return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+                        };
+                        const luminance = role => {
+                            const channels = rgb(role).map(c => c <= 0.04045 ? c / 12.92 :
+                                Math.pow((c + 0.055) / 1.055, 2.4));
+                            return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+                        };
+                        const contrast = (fg, bg) => {
+                            const a = luminance(fg), b = luminance(bg);
+                            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+                        };
+                        return {
+                            main: contrast('--gc-ink', '--gc-canvas'),
+                            panel: contrast('--gc-ink', '--gc-panel'),
+                            muted: contrast('--gc-muted', '--gc-canvas'),
+                            mutedPanel: contrast('--gc-muted', '--gc-panel-tint'),
+                            button: contrast('--gc-accent-ink', '--gc-accent')
+                        };
+                    }""")
+                    assert all(value >= 4.5 for value in ratios.values()), (name, mode, ratios)
+                    contrast_ratios.extend(ratios.values())
                 page.get_by_role("button", name="System").click()
                 assert page.locator("html").get_attribute("data-theme") == "system"
 
@@ -69,6 +102,32 @@ def run() -> list[dict]:
                     page.set_viewport_size({"width": width, "height": 900})
                     overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
                     assert overflow <= 1, f"{name} horizontal overflow at {width}px: {overflow}px"
+
+                # Text-only scaling is not native browser zoom or a WCAG certificate.
+                # Probe source reflow with 200% and 400% root font-size settings.
+                for multiplier, width in ((2, 375), (4, 320)):
+                    page.set_viewport_size({"width": width, "height": 900})
+                    page.evaluate("(size) => document.documentElement.style.fontSize = size",
+                                  f"{multiplier * 100}%")
+                    overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+                    if overflow > 1:
+                        offenders = page.evaluate("""() => [...document.querySelectorAll('body *')]
+                            .map(el => {
+                                const box = el.getBoundingClientRect();
+                                return {node: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 80),
+                                    right: Math.round(box.right), left: Math.round(box.left),
+                                    width: Math.round(box.width), clientWidth: el.clientWidth,
+                                    scrollWidth: el.scrollWidth,
+                                    text: (el.textContent || '').trim().slice(0, 55)};
+                            })
+                            .filter(o => o.right > innerWidth + 1 || o.left < -1 || o.scrollWidth > o.clientWidth + 1)
+                            .sort((a, b) => (b.scrollWidth - b.clientWidth) -
+                                (a.scrollWidth - a.clientWidth) || b.right - a.right).slice(0, 15)""")
+                        raise AssertionError(
+                            f"{name} text-size {multiplier * 100}% at {width}px overflow: "
+                            f"{overflow}px; offending nodes: {offenders}"
+                        )
+                    page.evaluate("document.documentElement.style.removeProperty('font-size')")
 
                 page.set_viewport_size({"width": 375, "height": 900})
                 page.emulate_media(forced_colors="active", reduced_motion="reduce")
@@ -91,7 +150,9 @@ def run() -> list[dict]:
                 # runtime resources or automatic network calls.
                 assert all(url.startswith(base + "/") for url in requests), (name, requests)
                 results.append({"browser": name, "previewChecks": "pass", "viewports": [320, 375, 768, 1280],
-                                "deployed": False, "runtimeCertified": False})
+                                "computedContrastFloor": round(min(contrast_ratios), 2),
+                                "textScaleProbes": [200, 400], "deployed": False,
+                                "runtimeCertified": False})
                 context.close()
                 browser.close()
     finally:
