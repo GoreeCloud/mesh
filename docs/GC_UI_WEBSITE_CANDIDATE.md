@@ -18,6 +18,17 @@ python3 scripts/validate_gc_ui_candidate.py --dist
 
 The builder copies the reviewed source to `dist-gc-ui-candidate/` **only**, creates a SHA-256 manifest with acceptance and deployment flags set false, and never modifies historical `website/`, `dist/` or their CI. The [isolated CI](../.github/workflows/validate-gc-ui-candidate.yml) validates an exact revision, checks source and built integrity, runs negative tests, and publishes a short-retention preview artifact. Independent [Chromium and Firefox smoke CI](../.github/workflows/gc-ui-preview-browser.yml) checks localhost-only focus/skip link, theme control, narrow reflow, reduced motion, forced colors and homepage/404 interactions. Both workflows have **no deployment job**. On merged main commit `5e8ac201dea110ef32a1eaeb4d7a7f26310ba783`, all three exact-commit checks passed (repository validate, GC UI candidate validate, GC UI browser smoke).
 
+## Local HTTP behavior checks (not CDN verification)
+
+The new `scripts/test_gc_ui_http.py` builds on the candidate's existing offline artifact and performs **real localhost GET/HEAD HTTP requests** to a restricted allowlist-only test server. The test server applies a **strict, fail-closed interpretation of the checked-in `gc-ui-site/_headers` policy**. Tests assert 200 homepage and asset bytes, an actual 404 HTTP status with the reviewed 404 page, noindex/CSP/HSTS *header values*, short static-cache policy, nonpublication of `_headers` and SHA256 manifest as public assets, and negative-policy regressions. The exact PR revision runs this check in [isolated candidate CI](../.github/workflows/validate-gc-ui-candidate.yml).
+
+```sh
+python3 scripts/build_gc_ui_candidate.py
+python3 scripts/test_gc_ui_http.py
+```
+
+**Scope warning:** This is a **simulated hosting-policy application** at 127.0.0.1, not verification that any real CDN correctly interprets `_headers`, nor actual HTTPS/TLS/HSTS enforcement, DNS, public 404 routing, cache behavior, security review or deployment acceptance. Those require a separately authorized staging and production test using the real hosting service.
+
 ## Release and cutover gates
 
 The available GC UI `foundations-v1.0.1` release is **scoped** to semantic tokens, color utilities and browser theme control; this candidate's local CSS is **not** a claim of package installation, product-level conformance, or a stable GC UI component catalog. In future work, prove the supported design contract and exact release/artifact provenance rather than mass-renaming predecessor variables.
