@@ -2,7 +2,7 @@
 """Fail-closed static acceptance of a non-deployed GC UI site candidate."""
 from __future__ import annotations
 import argparse
-from hashlib import sha256
+from hashlib import sha1, sha256
 from html.parser import HTMLParser
 import json
 from pathlib import Path
@@ -12,6 +12,13 @@ import sys
 from build_gc_ui_candidate import ROOT, SOURCE, DIST, FILES
 
 LEGACY = re.compile(r"glaze|(?:--|[./_-])glz[-_]", re.IGNORECASE)
+FOUNDATIONS_SOURCE_REPO = "GoreeCloud/gc-ui"
+FOUNDATIONS_SOURCE_COMMIT = "7e0b61ee70af2edb87aa736cca483425f0aacaf4"
+FOUNDATIONS_SOURCE_PATH = "styles/gc.v1.generated.css"
+FOUNDATIONS_GIT_BLOB = "c0e32a40f0bba280c9a4e9e01f31e1114d60f26c"
+FOUNDATIONS_RELEASE_TAG = "foundations-v1.0.1"
+FOUNDATIONS_ARCHIVE_SHA256 = "275d7e6dc9503b2e74b3190bcecf176d73d2345860e8a20fa5faa3b326cd2298"
+
 REQUIRED_IDS = {"top", "main", "model", "boundaries", "status"}
 CHECKS = ("prefers-color-scheme", "prefers-reduced-motion", "forced-colors",
           "prefers-contrast", "max-width:600px", "focus-visible", "--gc-accent")
@@ -87,6 +94,17 @@ def validate(folder: Path, built: bool) -> dict:
         if LEGACY.search(text):
             raise ValueError("active predecessor reference in candidate file: " + file.name)
         sources[output_name] = data
+    # The official stable 1.0.1 package build copies this exact generated
+    # stylesheet unchanged from the pinned release source commit. We verify
+    # *Git source blob identity*, not equivalence to a separately downloaded
+    # tarball or successful npm registry installation.
+    foundation = sources["assets/gc-ui-foundations.css"]
+    blob_bytes = b"blob " + str(len(foundation)).encode("ascii") + bytes([0]) + foundation
+    if sha1(blob_bytes).hexdigest() != FOUNDATIONS_GIT_BLOB:
+        raise ValueError("pinned GC UI Foundations CSS drift: unreviewed source")
+    if b"@import" in foundation or b"url(http" in foundation:
+        raise ValueError("Foundations CSS must remain self-contained and local")
+
     if built:
         manifest = json.loads((folder / "SHA256SUMS.json").read_text("utf-8"))
         if manifest.get("schema") != "gc-ui-mesh-site-candidate.v1":
@@ -117,7 +135,7 @@ def validate(folder: Path, built: bool) -> dict:
             raise ValueError(title + ": no main region")
         if any(anchor not in page.ids for anchor in page.anchors):
             raise ValueError(title + ": broken in-page anchor")
-        if page.styles != ["./assets/site.css"]:
+        if page.styles != ["./assets/gc-ui-foundations.css", "./assets/site.css"]:
             raise ValueError(title + ": CSS must be local, sole reviewed source")
         if title == "home":
             if set(page.ids).issuperset(REQUIRED_IDS) is False:
@@ -135,6 +153,16 @@ def validate(folder: Path, built: bool) -> dict:
         if "noindex" not in html:
             raise ValueError("unaccepted preview must not be indexed")
     css = read("assets/site.css")
+    foundations = read("assets/gc-ui-foundations.css")
+    for name in ("--gc-v1-foundation-target-touch",
+                 "--gc-v1-foundation-typography-family-ui",
+                 "--gc-v1-component-focus-width",
+                 "--gc-v1-color-on-canvas"):
+        if name not in foundations:
+            raise ValueError("pinned Foundations token not defined: " + name)
+        if name != "--gc-v1-color-on-canvas" and name not in read("assets/site.css"):
+            raise ValueError("Mesh preview does not use Foundations role: " + name)
+
     script = read("assets/site.js")
     headers = read("_headers")
     for token in CHECKS:

@@ -35,6 +35,12 @@ class GCUICandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "predecessor"):
             validate(self.folder, built=False)
 
+    def test_unreviewed_foundations_css_change_is_rejected(self):
+        p = self.folder / "gc-ui-foundations.css"
+        p.write_text(p.read_text() + "\\n/* unreviewed change */\\n")
+        with self.assertRaisesRegex(ValueError, "Foundations CSS drift"):
+            validate(self.folder, built=False)
+
     def test_missing_csp_fails_closed(self):
         p = self.folder / "_headers"
         p.write_text(p.read_text().replace("connect-src 'none'", "connect-src *"))

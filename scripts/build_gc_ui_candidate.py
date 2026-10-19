@@ -16,6 +16,7 @@ FILES = {
     "404.html": "404.html",
     "_headers": "_headers",
     "site.css": "assets/site.css",
+    "gc-ui-foundations.css": "assets/gc-ui-foundations.css",
     "site.js": "assets/site.js",
 }
 
