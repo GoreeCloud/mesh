@@ -175,3 +175,11 @@ body.page-error main{min-height:60vh;display:grid;place-items:center}
   .mesh-diagram{min-width:0}
   .mesh-center{max-width:100%;text-align:center}
 }
+
+/* Diagnostic-backed large text: badges and footer labels need line breaking. */
+.eyebrow,.panel-index,.footer-content>div,.footer-content strong,.footer-content small{
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
