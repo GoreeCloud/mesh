@@ -183,3 +183,6 @@ body.page-error main{min-height:60vh;display:grid;place-items:center}
   overflow-wrap:anywhere;
   white-space:normal;
 }
+
+/* Keep the fixed keyboard skip link inside the viewport at large text sizes. */
+.skip{max-width:calc(100vw - 30px);min-width:0;overflow-wrap:anywhere;white-space:normal}
