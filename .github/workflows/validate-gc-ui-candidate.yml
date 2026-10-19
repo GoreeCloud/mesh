@@ -53,7 +53,10 @@ jobs:
       - name: Verify production website remains untouched
         run: |
           test ! -e dist
-          git diff --exit-code "$CANDIDATE_REVISION" -- website scripts/build_public_site.py scripts/validate_public_site.py .github/workflows/validate-website.yml
+          test "$(git rev-parse HEAD:website)" = "6b402262e0eea533eb6b7dbb08ce92bbd8b92b2a"
+          test "$(git rev-parse HEAD:scripts/build_public_site.py)" = "d51d64caf7876f46a9db08ebaf70b401ca3b2023"
+          test "$(git rev-parse HEAD:scripts/validate_public_site.py)" = "0bee6f7a39cdb29527cbbf3c342e9f6a010273f6"
+          test "$(git rev-parse HEAD:.github/workflows/validate-website.yml)" = "f7d5e9abfd2e39ae70fb58362018a45cf406342a"
           test -f dist-gc-ui-candidate/SHA256SUMS.json
       - name: Upload preview artifact, never deploy
         uses: actions/upload-artifact@v4
