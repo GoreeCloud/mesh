@@ -116,10 +116,13 @@ def run() -> list[dict]:
                                 const box = el.getBoundingClientRect();
                                 return {node: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 80),
                                     right: Math.round(box.right), left: Math.round(box.left),
-                                    width: Math.round(box.width), text: (el.textContent || '').trim().slice(0, 55)};
+                                    width: Math.round(box.width), clientWidth: el.clientWidth,
+                                    scrollWidth: el.scrollWidth,
+                                    text: (el.textContent || '').trim().slice(0, 55)};
                             })
-                            .filter(o => o.right > innerWidth + 1 || o.left < -1)
-                            .sort((a, b) => b.right - a.right).slice(0, 12)""")
+                            .filter(o => o.right > innerWidth + 1 || o.left < -1 || o.scrollWidth > o.clientWidth + 1)
+                            .sort((a, b) => (b.scrollWidth - b.clientWidth) -
+                                (a.scrollWidth - a.clientWidth) || b.right - a.right).slice(0, 15)""")
                         raise AssertionError(
                             f"{name} text-size {multiplier * 100}% at {width}px overflow: "
                             f"{overflow}px; offending nodes: {offenders}"
