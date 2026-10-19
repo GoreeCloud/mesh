@@ -5,7 +5,7 @@
   --gc-ink:#172336; --gc-muted:#52627a; --gc-canvas:#f4f7fb; --gc-panel:#ffffff;
   --gc-panel-tint:#eaf1fb; --gc-line:#ccd9e8; --gc-accent:#2156b8; --gc-accent-ink:#fff;
   --gc-decor:#5f61ce; --gc-focus:#b64b15; --gc-shadow:0 14px 42px rgba(29,49,90,.07);
-  --gc-radius:22px; --gc-control:48px;
+  --gc-radius:22px; --gc-control:var(--gc-v1-foundation-target-touch);
 }
 :root[data-theme="dark"] {
   color-scheme:dark; --gc-ink:#f2f6ff; --gc-muted:#bdc9dd; --gc-canvas:#101728;
@@ -24,7 +24,7 @@
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:7rem}
 body{margin:0;background:var(--gc-canvas);color:var(--gc-ink);
- font:400 1rem/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+ font:400 1rem/1.6 var(--gc-v1-foundation-typography-family-ui)}
 a{color:inherit}
 button{font:inherit}
 img,svg{max-width:100%;height:auto}
@@ -32,7 +32,7 @@ img,svg{max-width:100%;height:auto}
 .skip{position:fixed;top:-120px;left:15px;z-index:300;padding:11px 18px;
  background:var(--gc-panel);border:2px solid var(--gc-accent);border-radius:12px;font-weight:700}
 .skip:focus{top:12px}
-:where(a,button):focus-visible{outline:3px solid var(--gc-focus);outline-offset:4px}
+:where(a,button):focus-visible{outline:var(--gc-v1-component-focus-width) solid var(--gc-focus);outline-offset:4px}
 .header{position:sticky;z-index:100;top:0;border-bottom:1px solid var(--gc-line);
  background:var(--gc-panel)}
 .header-grid{display:grid;grid-template-columns:auto 1fr auto;min-height:86px;align-items:center;gap:24px}
