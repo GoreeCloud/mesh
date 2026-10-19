@@ -25,6 +25,7 @@ EXPECTED_ROUTES = {
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/404.html": ("404.html", "text/html; charset=utf-8"),
     "/assets/site.css": ("assets/site.css", "text/css; charset=utf-8"),
+    "/assets/gc-ui-foundations.css": ("assets/gc-ui-foundations.css", "text/css; charset=utf-8"),
     "/assets/site.js": ("assets/site.js", "text/javascript; charset=utf-8"),
 }
 EXPECTED_PATTERNS = ("/*", "/assets/*", "/*.html")
@@ -171,7 +172,7 @@ class CandidateLocalHTTPTests(unittest.TestCase):
         self.assertEqual(headers["Content-Type"], "text/html; charset=utf-8")
 
     def test_static_assets_are_local_and_short_cached(self):
-        for path in ("/assets/site.css", "/assets/site.js"):
+        for path in ("/assets/site.css", "/assets/gc-ui-foundations.css", "/assets/site.js"):
             with self.subTest(path=path):
                 status, headers, body = fetch(self.base, path)
                 self.assertEqual(status, 200)
