@@ -1,0 +1,55 @@
+name: GC UI candidate real-browser smoke tests
+
+on:
+  pull_request:
+    paths:
+      - 'gc-ui-site/**'
+      - 'scripts/build_gc_ui_candidate.py'
+      - 'scripts/validate_gc_ui_candidate.py'
+      - 'scripts/test_gc_ui_browser.py'
+      - '.github/workflows/gc-ui-preview-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'gc-ui-site/**'
+      - 'scripts/build_gc_ui_candidate.py'
+      - 'scripts/validate_gc_ui_candidate.py'
+      - 'scripts/test_gc_ui_browser.py'
+      - '.github/workflows/gc-ui-preview-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-browser:
+    name: Chromium and Firefox candidate smoke (no deploy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Compile and validate source
+        run: |
+          python3 -m py_compile scripts/test_gc_ui_browser.py scripts/build_gc_ui_candidate.py scripts/validate_gc_ui_candidate.py
+          python3 scripts/validate_gc_ui_candidate.py
+          python3 scripts/build_gc_ui_candidate.py
+          python3 scripts/validate_gc_ui_candidate.py --dist
+      - name: Install exact Playwright Python release
+        run: python3 -m pip install --disable-pip-version-check playwright==1.56.0
+      - name: Install isolated test browser runtimes
+        run: python3 -m playwright install --with-deps chromium firefox
+      - name: Run browser smoke against localhost only
+        run: python3 scripts/test_gc_ui_browser.py
+      - name: Keep live website and deploy pipeline untouched
+        run: |
+          test ! -e dist
+          test "$(git rev-parse HEAD:website)" = "6b402262e0eea533eb6b7dbb08ce92bbd8b92b2a"
+          test "$(git rev-parse HEAD:.github/workflows/validate-website.yml)" = "f7d5e9abfd2e39ae70fb58362018a45cf406342a"
