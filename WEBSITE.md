@@ -14,6 +14,10 @@ GoreeCloud Mesh owns the standalone **Mesh Center** public website source in thi
 
 The Cloudflare project, DNS/custom-domain binding, HTTPS verification, and production acceptance remain deployment operations separate from source implementation. A successful source build or preview does not establish public production availability.
 
+## GoreeCloud UI succession — migration required
+
+**Effective October 19, 2026:** GoreeCloud UI (GC UI) is Integral Platform System **5 of 9** and permanently replaces Glaze and Glaze UI as the active GoreeCloud design authority. The Glaze files and build dependencies described below are **legacy source and migration debt**, not currently acceptable GC UI conformance. Mesh's site is **not** asserted to be migrated, production-qualified or redeployed. Do not introduce any new Glaze dependency; first build and validate an independent GC UI replacement with keyboard, contrast, responsive, privacy, asset-integrity, rollback and deployment acceptance, then remove the old active dependencies. Preserve the historical lockfile for provenance until retirement is independently verified.
+
 ## Glaze UI baseline
 
 The website is a ground-up consumer of **Glaze UI 2.2.0 Stable**. `website/glaze.lock.json` pins the Stable tag, promotion commit, and each browser CSS Git blob. CI checks out that exact Glaze revision and the build verifies every copied blob before creating `dist/`. Browsers consume only local built assets.
