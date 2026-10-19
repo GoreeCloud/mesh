@@ -75,7 +75,7 @@ def run() -> list[dict]:
                 assert page.evaluate("matchMedia('(forced-colors: active)').matches")
                 assert page.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
                 page.emulate_media(forced_colors="none", reduced_motion="reduce")
-                page.get_by_role("link", name="Model").click()
+                page.get_by_role("navigation", name="Primary navigation").get_by_role("link", name="Model", exact=True).click()
                 assert page.url.endswith("#model"), name + " in-page navigation failed"
 
                 # The candidate 404 is a static document; HTTP missing-path behavior
