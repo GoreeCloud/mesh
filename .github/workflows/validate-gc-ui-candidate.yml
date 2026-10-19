@@ -1,0 +1,64 @@
+name: Validate isolated GC UI website candidate
+
+on:
+  pull_request:
+    paths:
+      - 'gc-ui-site/**'
+      - 'scripts/build_gc_ui_candidate.py'
+      - 'scripts/validate_gc_ui_candidate.py'
+      - 'tests/test_gc_ui_candidate.py'
+      - '.github/workflows/validate-gc-ui-candidate.yml'
+      - 'docs/GC_UI_WEBSITE_CANDIDATE.md'
+  push:
+    branches: [main]
+    paths:
+      - 'gc-ui-site/**'
+      - 'scripts/build_gc_ui_candidate.py'
+      - 'scripts/validate_gc_ui_candidate.py'
+      - 'tests/test_gc_ui_candidate.py'
+      - '.github/workflows/validate-gc-ui-candidate.yml'
+      - 'docs/GC_UI_WEBSITE_CANDIDATE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-isolated-candidate:
+    name: Validate GC UI candidate only (no deploy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CANDIDATE_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Check out exact candidate revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.CANDIDATE_REVISION }}
+          persist-credentials: false
+      - name: Verify revision provenance
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_REVISION"
+      - name: Check offline Python and JavaScript syntax
+        run: |
+          python3 -m py_compile scripts/build_gc_ui_candidate.py scripts/validate_gc_ui_candidate.py tests/test_gc_ui_candidate.py
+          node --check gc-ui-site/site.js
+      - name: Inspect non-deployed original candidate
+        run: python3 scripts/validate_gc_ui_candidate.py
+      - name: Run positive and negative candidate tests
+        run: python3 -m unittest discover -s tests -p test_gc_ui_candidate.py -v
+      - name: Build independent local candidate without Glaze checkout
+        run: python3 scripts/build_gc_ui_candidate.py
+      - name: Verify built candidate hashes, CSP and local dependencies
+        run: python3 scripts/validate_gc_ui_candidate.py --dist
+      - name: Verify production website remains untouched
+        run: |
+          test ! -e dist
+          git diff --exit-code "$CANDIDATE_REVISION" -- website scripts/build_public_site.py scripts/validate_public_site.py .github/workflows/validate-website.yml
+          test -f dist-gc-ui-candidate/SHA256SUMS.json
+      - name: Upload preview artifact, never deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: gc-ui-mesh-preview-${{ env.CANDIDATE_REVISION }}
+          path: dist-gc-ui-candidate/
+          if-no-files-found: error
+          retention-days: 14
