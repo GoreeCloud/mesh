@@ -128,7 +128,9 @@ body.page-error main{min-height:60vh;display:grid;place-items:center}
  .theme{grid-row:3;width:max-content;max-width:100%;flex-wrap:wrap}
  .nav{gap:2px}
  .nav a{padding-inline:10px}
- .hero{padding:25px;border-radius:22px}
+ .hero{padding:25px;border-radius:22px;grid-template-columns:minmax(0,1fr)}
+ .hero-content,.section-heading,.panel,.boundary,.invariant{min-width:0}
+ .hero h1{overflow-wrap:anywhere}
  .feature-grid,.boundary-grid,.status-grid{grid-template-columns:1fr}
  .section{padding-top:64px}
  .footer-content{flex-direction:column;align-items:flex-start}
