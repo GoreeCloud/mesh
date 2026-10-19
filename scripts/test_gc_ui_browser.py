@@ -110,9 +110,20 @@ def run() -> list[dict]:
                     page.evaluate("(size) => document.documentElement.style.fontSize = size",
                                   f"{multiplier * 100}%")
                     overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
-                    assert overflow <= 1, (
-                        f"{name} text-size {multiplier * 100}% at {width}px overflow: {overflow}px"
-                    )
+                    if overflow > 1:
+                        offenders = page.evaluate("""() => [...document.querySelectorAll('body *')]
+                            .map(el => {
+                                const box = el.getBoundingClientRect();
+                                return {node: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 80),
+                                    right: Math.round(box.right), left: Math.round(box.left),
+                                    width: Math.round(box.width), text: (el.textContent || '').trim().slice(0, 55)};
+                            })
+                            .filter(o => o.right > innerWidth + 1 || o.left < -1)
+                            .sort((a, b) => b.right - a.right).slice(0, 12)""")
+                        raise AssertionError(
+                            f"{name} text-size {multiplier * 100}% at {width}px overflow: "
+                            f"{overflow}px; offending nodes: {offenders}"
+                        )
                     page.evaluate("document.documentElement.style.removeProperty('font-size')")
 
                 page.set_viewport_size({"width": 375, "height": 900})
