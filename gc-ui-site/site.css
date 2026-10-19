@@ -152,3 +152,26 @@ body.page-error main{min-height:60vh;display:grid;place-items:center}
  :root{--gc-line:currentColor}
  .action.secondary,.theme button[aria-pressed="true"]{border:2px solid currentColor}
 }
+
+/* Large-text reflow: preserve reading and interaction instead of clipping. */
+.header-grid,.brand,.brand-type,.nav,.nav a,.footer nav a,.action,.theme,.theme button,
+.mesh-diagram,.mesh-diagram p,.mesh-node,.mesh-center{
+  min-width:0;
+}
+.brand-type strong,.brand-type small,.nav a,.footer nav a,.action,.theme button,
+.mesh-diagram p,.mesh-node,.mesh-center{
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+.mesh-diagram p{width:100%;max-width:100%;padding-inline:4px}
+.action{max-width:100%;text-align:center}
+.theme{max-width:100%}
+.theme button{flex:1 1 54px;max-width:100%}
+@media(max-width:600px){
+  .header-grid{grid-template-columns:minmax(0,1fr)}
+  .header-grid>*{min-width:0;max-width:100%}
+  .nav,.theme{width:100%}
+  .nav a{flex:1 1 auto;text-align:center;justify-content:center}
+  .mesh-diagram{min-width:0}
+  .mesh-center{max-width:100%;text-align:center}
+}
