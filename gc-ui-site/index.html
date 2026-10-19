@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-theme="system" data-gc-ui="mesh-source-candidate">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="A development preview of GoreeCloud Mesh, the bounded coordination layer for platform relationships and capabilities.">
+  <title>GoreeCloud Mesh — GC UI development preview</title>
+  <link rel="stylesheet" href="./assets/site.css">
+  <script src="./assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to main content</a>
+  <header class="header">
+    <div class="wrap header-grid">
+      <a class="brand" href="#top" aria-label="GoreeCloud Mesh home"><span class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span></span><span class="brand-type"><strong>GoreeCloud Mesh</strong><small>Integral coordination fabric</small></span></a>
+      <nav class="nav" aria-label="Primary navigation">
+        <a href="#model">Model</a><a href="#boundaries">Boundaries</a><a href="#status">Status</a>
+      </nav>
+      <div class="theme" role="group" aria-label="Appearance preference">
+        <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+        <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </header>
+  <main id="main" class="wrap" tabindex="-1">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="hero-content">
+        <span class="eyebrow">GC UI preview · development source, not production</span>
+        <h1 id="hero-title">Coordinate openly.<br><span>Keep authority independent.</span></h1>
+        <p>GoreeCloud Mesh records first-party capabilities and their relationships so platform components can coordinate without taking control of one another.</p>
+        <div class="actions"><a class="action primary" href="#model">Explore the model <span aria-hidden="true">↗</span></a><a class="action secondary" href="https://github.com/GoreeCloud/mesh">Explore source</a></div>
+        <p class="disclaimer">This is an isolated design-and-build candidate. Production Identity verification, deployment acceptance, security integrations and stable qualification remain unverified.</p>
+      </div>
+      <div class="mesh-diagram" aria-label="Conceptual relationship between Registry, Graph, Policy and Events; not live infrastructure state" role="img">
+        <span class="mesh-ring ring-a" aria-hidden="true"></span><span class="mesh-ring ring-b" aria-hidden="true"></span>
+        <span class="mesh-center" aria-hidden="true">Mesh</span>
+        <span class="mesh-node node-a" aria-hidden="true">Registry</span><span class="mesh-node node-b" aria-hidden="true">Graph</span><span class="mesh-node node-c" aria-hidden="true">Policy</span><span class="mesh-node node-d" aria-hidden="true">Events</span>
+        <p>Conceptual architecture · No live data</p>
+      </div>
+    </section>
+    <section class="section" id="model" aria-labelledby="model-title">
+      <div class="section-heading"><span class="eyebrow">Core coordination model</span><h2 id="model-title">Make relationships explicit.</h2><p>Connections, capabilities and events remain inspectable. Discovery is not authorization.</p></div>
+      <div class="feature-grid">
+        <article class="panel"><span class="panel-index">01 / Discovery</span><h3>Registry</h3><p>Describe declared service identities, versions, capabilities, dependencies and operational context.</p></article>
+        <article class="panel"><span class="panel-index">02 / Topology</span><h3>Graph</h3><p>Model direct relationships and evaluate dependency impact without silently inventing trust.</p></article>
+        <article class="panel"><span class="panel-index">03 / Enforcement</span><h3>Policy</h3><p>Fail closed when verified identity, policy, relationship or target availability is missing.</p></article>
+        <article class="panel"><span class="panel-index">04 / Exchange</span><h3>Events</h3><p>Coordinate bounded lifecycle signals while source systems retain ownership of their data.</p></article>
+      </div>
+    </section>
+    <section class="section" id="boundaries" aria-labelledby="boundary-title">
+      <div class="section-heading"><span class="eyebrow">Separation of authority</span><h2 id="boundary-title">Connected, not centralized.</h2><p>Each Integral Platform System retains its distinct security, privacy, identity and continuity responsibilities.</p></div>
+      <div class="boundary-layout">
+        <div class="boundary-grid">
+          <article class="boundary"><h3>Identity</h3><p>Authenticates principals, devices, credentials, sessions and delegated authority.</p></article>
+          <article class="boundary"><h3>Wardveil Security</h3><p>Owns protection, threat detection, security verification, response and evidence.</p></article>
+          <article class="boundary"><h3>Privacy Shield</h3><p>Owns consent, minimization, retention boundaries and user privacy controls.</p></article>
+          <article class="boundary"><h3>Everkeep</h3><p>Owns preservation, recovery, portability, backup and continuity.</p></article>
+        </div>
+        <aside class="invariant"><span class="eyebrow">Non-negotiable invariant</span><strong>authority_transfer = false</strong><p>Coordination is neither an authentication bypass nor permission to access another system's state.</p></aside>
+      </div>
+    </section>
+    <section class="section section-last" id="status" aria-labelledby="status-title">
+      <div class="section-heading"><span class="eyebrow">Truthful status</span><h2 id="status-title">The source exists. Production acceptance is separate.</h2></div>
+      <div class="status-grid">
+        <article class="panel"><h3>Available as development source</h3><ul><li>Native Registry, Graph, Policy and Events foundation</li><li>Private-first API and local state handling</li><li>Explicit platform contract evidence model</li><li>First-party coordination contracts</li></ul></article>
+        <article class="panel"><h3>Not yet independently accepted</h3><ul><li>Production Identity authentication and service access</li><li>Gateway, monitoring and external integration adapters</li><li>GC UI website rendering and production deployment</li><li>Security, privacy, backup, recovery and rollback acceptance</li></ul></article>
+      </div>
+    </section>
+  </main>
+  <footer class="footer"><div class="wrap footer-content"><div><strong>GoreeCloud Mesh</strong><small>Coordination without authority transfer.</small></div><nav aria-label="Footer navigation"><a href="https://www.goreecloud.com/">GoreeCloud</a><a href="https://projects.goreecloud.com/">Projects</a><a href="https://github.com/GoreeCloud/mesh">Source repository</a></nav></div></footer>
+</body>
+</html>
