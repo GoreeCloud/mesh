@@ -99,7 +99,7 @@ def validate(folder: Path, built: bool) -> dict:
     # *Git source blob identity*, not equivalence to a separately downloaded
     # tarball or successful npm registry installation.
     foundation = sources["assets/gc-ui-foundations.css"]
-    blob_bytes = b"blob " + str(len(foundation)).encode("ascii") + b"\\0" + foundation
+    blob_bytes = b"blob " + str(len(foundation)).encode("ascii") + bytes([0]) + foundation
     if sha1(blob_bytes).hexdigest() != FOUNDATIONS_GIT_BLOB:
         raise ValueError("pinned GC UI Foundations CSS drift: unreviewed source")
     if b"@import" in foundation or b"url(http" in foundation:
