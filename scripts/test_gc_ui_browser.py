@@ -69,7 +69,9 @@ def run() -> list[dict]:
                     ratios = page.evaluate("""() => {
                         const root = getComputedStyle(document.documentElement);
                         const rgb = role => {
-                            const hex = root.getPropertyValue(role).trim();
+                            const raw = root.getPropertyValue(role).trim();
+                            const hex = /^#[0-9a-f]{3}$/i.test(raw)
+                                ? '#' + [...raw.slice(1)].map(ch => ch + ch).join('') : raw;
                             if (!/^#[0-9a-f]{6}$/i.test(hex)) throw Error('invalid role: ' + role);
                             return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
                         };
