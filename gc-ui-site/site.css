@@ -186,3 +186,6 @@ body.page-error main{min-height:60vh;display:grid;place-items:center}
 
 /* Keep the fixed keyboard skip link inside the viewport at large text sizes. */
 .skip{max-width:calc(100vw - 30px);min-width:0;overflow-wrap:anywhere;white-space:normal}
+
+/* Long operational status bullets must remain readable even with 400% text. */
+.status-grid ul,.status-grid li{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
