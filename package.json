@@ -1,0 +1,10 @@
+{
+  "name": "goreecloud-mesh-reference-fixture",
+  "version": "0.0.1-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test examples/synthetic/*.test.mjs",
+    "demo": "node examples/synthetic/demo.mjs"
+  }
+}

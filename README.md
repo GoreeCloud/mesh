@@ -16,6 +16,8 @@
 
 **Engineering checkpoint:** [Evidence-based stability and release gates](docs/stability-gates.md) define safe implementation sequencing, ownership boundaries, and evidence required before claiming an operational Mesh capability.
 
+**Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises a strictly local, read-only contract and automated denial/failure tests. It does not connect to any GoreeCloud product or external system.
+
 ## 1. Overview
 
 GoreeCloud Mesh provides the intended common fabric through which heterogeneous technology can discover, connect, exchange information, coordinate actions, and participate in end-to-end workflows. It brings together **APIs, Model Context Protocol (MCP) integrations, webhooks, adapters, connectors, bridges, middleware, and appropriate mesh and integration technologies** under a coherent GoreeCloud ecosystem vision.
