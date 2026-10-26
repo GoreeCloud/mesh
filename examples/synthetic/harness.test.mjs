@@ -45,6 +45,19 @@ test('unknown capabilities and mutation operations are unsupported', async () =>
   assert.equal((await read(h, 'fixture.reader', capabilityId, 'status.write')).error.code, 'unsupported');
 });
 
+test('malformed and hostile request envelopes return typed denial instead of throwing', async () => {
+  const h = harness();
+  const hostile = new Proxy({}, { ownKeys() { throw new Error('untrusted request trap'); } });
+  const accessor = Object.defineProperty({ capabilityId, operation: 'status.read' }, 'actor', {
+    enumerable: true,
+    get() { throw new Error('untrusted actor getter'); },
+  });
+  for (const request of [null, [], 'untrusted', 42, hostile, accessor,
+    { actor: 'fixture.reader', capabilityId, payload: 'not a declared field' }]) {
+    assert.deepEqual(await h.read(request), { ok: false, error: { code: 'unsupported' } });
+  }
+});
+
 test('Mesh and owner both independently default deny', async () => {
   let ownerCalls = 0;
   const adapters = { [capabilityId]: fixtureAdapter({

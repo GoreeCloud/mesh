@@ -75,7 +75,19 @@ export function createSyntheticHarness({
       // Return inert copies; capability presence conveys no permission or health.
       return inventory.map(capability => ({ ...capability }));
     },
-    async read({ actor, capabilityId, operation = 'status.read' } = {}) {
+    async read(request = {}) {
+      // The request boundary is untrusted too. Never let nulls, accessors,
+      // proxies or undeclared payload fields escape as uncaught exceptions.
+      let actor, capabilityId, operation;
+      try {
+        if (!plain(request) || Object.keys(request).some(key =>
+          !['actor', 'capabilityId', 'operation'].includes(key))) return failure('unsupported');
+        actor = request.actor;
+        capabilityId = request.capabilityId;
+        operation = own(request, 'operation') ? request.operation : 'status.read';
+      } catch {
+        return failure('unsupported');
+      }
       const capability = byID.get(capabilityId);
       if (!capability || operation !== 'status.read' || capability.operation !== operation) {
         return failure('unsupported');
