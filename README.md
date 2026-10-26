@@ -125,7 +125,7 @@ This diagram expresses **conceptual responsibilities only**, not a deployed topo
 
 Mesh **coordinates** approved interfaces across the other platforms; it does **not** replace their respective authorities, independently grant identities or permissions, define privacy policy, implement malware defense, or become the UI design authority. Each owning application or system remains responsible for enforcing its own protected operations.
 
-**Existing governance discrepancy requiring reconciliation:** The current Google Drive requirement titled `Requirement - Mandatory Integral Platform Systems (MIPS).md` defines **four “Mandatory Integral”** systems (UI, GoreeShield, Wardveil, Identity) and an applicable-integration prerequisite for **Anchor** release eligibility. The founder's newer direction uses **“Mandatory Integrated”**, names **five**, and adds Mesh. This README records that updated direction **without asserting that the existing canonical requirement, Anchor release gate, or product compliance matrix has already been amended**. Those changes require authorized governance reconciliation and verification.
+**Canonical MIPS requirement aligned and verified (October 25, 2026):** The existing Google Drive requirement `GoreeCloud/Requirements/Requirement - Mandatory Integral Platform Systems (MIPS).md` was updated **in place**, retaining its historical filename and file identity. Its current content uses **Mandatory Integrated Platform Systems**, defines **five** platforms including Mesh, and requires a verified applicability disposition for each of the five before **Anchor** release eligibility. This governance correction does **not** certify that consumer integrations, test evidence, or automated release enforcement already exist.
 
 ## 7. Trust, Security, and Privacy Boundaries
 
@@ -180,7 +180,7 @@ Before implementation details or release status can be asserted, resolve:
 - The first stable API, webhook, MCP, event, and workflow contracts and their version policy.
 - How consent, identity, permission delegation, logging and incident reporting integrate with the other MIPS.
 - Trust-boundary, data-residency, encryption and retention requirements per integration class.
-- Canonical MIPS terminology (**Integral** versus **Integrated**), membership (**four** versus **five**), and any corresponding Anchor release-gate change.
+- Product-level assessment and implementation of the canonical five-MIPS Anchor release prerequisite, including integration and non-applicability evidence.
 - Implementation milestones, test evidence, supported deployment targets, and release-readiness criteria.
 
 ## 11. Related Records
@@ -190,6 +190,6 @@ Before implementation details or release status can be asserted, resolve:
 - `GoreeCloud/GoreeCloud-Instructions.md` — governing GoreeCloud operating instructions (Google Drive).
 - `GoreeCloud/Instructions/GoreeCloud_Document_This_Documentation_Protocol.md` — founder-directed documentation protocol (Google Drive).
 - `GoreeCloud/Requirements/Requirement - Universal Integration and Control Support.md` — ecosystem interoperability and integration requirement (Google Drive).
-- `GoreeCloud/Requirements/Requirement - Mandatory Integral Platform Systems (MIPS).md` — existing four-platform release-eligibility requirement requiring reconciliation (Google Drive).
+- [Canonical five-MIPS release-eligibility requirement](https://drive.google.com/file/d/1mzBTnWag2ca8wsRg9uHl4IXOkjkoTT9o/view) — authoritative Google Drive Markdown requirement (historical filename retained).
 
-**Change-control note:** This README captures current founder product direction and identifies outstanding governance reconciliation. It does not itself modify the canonical MIPS requirement, approve final technical architecture, demonstrate functioning integrations, or certify a release.
+**Change-control note:** This README captures current founder product direction and reflects the separately verified correction of the canonical five-MIPS requirement. It does not itself approve final technical architecture, demonstrate functioning integrations, or certify a release.
