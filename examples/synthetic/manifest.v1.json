@@ -1,0 +1,22 @@
+{
+  "schema_version": "mesh.capabilities.v1",
+  "environment": "synthetic-local-only",
+  "capabilities": [
+    {
+      "id": "fixture.alpha.status",
+      "owner": "fixture.alpha",
+      "version": "0.0.1-fixture",
+      "operation": "status.read",
+      "sensitivity": "synthetic",
+      "evidence_status": "prototype"
+    },
+    {
+      "id": "fixture.beta.status",
+      "owner": "fixture.beta",
+      "version": "0.0.1-fixture",
+      "operation": "status.read",
+      "sensitivity": "synthetic",
+      "evidence_status": "prototype"
+    }
+  ]
+}
