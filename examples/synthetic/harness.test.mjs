@@ -122,3 +122,35 @@ test('stale, duplicate or non-synthetic manifests are rejected before use', () =
   assert.throws(() => createSyntheticHarness({ manifest, maxResponseBytes: 100000 }), TypeError);
   assert.equal(validateManifest(manifest).length, 2);
 });
+
+test('source-controlled accessors cannot change a validated status after inspection', async () => {
+  let getterCalls = 0;
+  const accessorStatus = {
+    get state() { getterCalls += 1; return getterCalls === 1 ? 'ok' : 'degraded'; },
+    observed_at: status().observed_at,
+  };
+  const adapter = fixtureAdapter({ readStatus: async () => accessorStatus });
+  const result = await read(harness({ adapters: { [capabilityId]: adapter } }));
+  assert.deepEqual(result, { ok: false, error: { code: 'invalid_response' } });
+  assert.equal(getterCalls, 0, 'untrusted getters must not be invoked');
+
+  const hidden = { ...status() };
+  Object.defineProperty(hidden, 'secret', { value: 'unapproved', enumerable: false });
+  const withSymbol = { ...status(), [Symbol('secret')]: 'unapproved' };
+  for (const value of [hidden, withSymbol]) {
+    const response = await read(harness({
+      adapters: { [capabilityId]: fixtureAdapter({ readStatus: async () => value }) },
+    }));
+    assert.equal(response.error.code, 'invalid_response');
+  }
+});
+
+test('owner data is captured once and returned as inert primitives', async () => {
+  const source = status();
+  const result = await read(harness({
+    adapters: { [capabilityId]: fixtureAdapter({ readStatus: async () => source }) },
+  }));
+  assert.equal(result.ok, true);
+  source.state = 'degraded';
+  assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
+});

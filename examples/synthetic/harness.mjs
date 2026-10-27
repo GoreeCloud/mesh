@@ -43,15 +43,23 @@ function failure(code) {
   return { ok: false, error: { code } };
 }
 
-function validStatus(value, maxResponseBytes) {
+function snapshotStatus(value, maxResponseBytes) {
   try {
-    if (!exactKeys(value, ['state', 'observed_at']) || !STATES.has(value.state) ||
-        typeof value.observed_at !== 'string') return false;
-    const parsed = Date.parse(value.observed_at);
-    if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value.observed_at) return false;
-    return Buffer.byteLength(JSON.stringify(value), 'utf8') <= maxResponseBytes;
+    if (!plain(value)) return null;
+    // Never execute a source-controlled getter, or validate one value and
+    // publish a different one after an accessor changes its answer.
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== 2 || !keys.includes('state') || !keys.includes('observed_at')) return null;
+    const fields = Object.getOwnPropertyDescriptors(value);
+    if (!own(fields.state, 'value') || !own(fields.observed_at, 'value') ||
+        !STATES.has(fields.state.value) || typeof fields.observed_at.value !== 'string') return null;
+    const parsed = Date.parse(fields.observed_at.value);
+    if (!Number.isFinite(parsed) ||
+        new Date(parsed).toISOString() !== fields.observed_at.value) return null;
+    const snapshot = { state: fields.state.value, observed_at: fields.observed_at.value };
+    return Buffer.byteLength(JSON.stringify(snapshot), 'utf8') <= maxResponseBytes ? snapshot : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -129,13 +137,14 @@ export function createSyntheticHarness({
         if (outcome.kind === 'timeout') return failure('timed_out');
         if (outcome.kind === 'denied') return failure('denied');
         if (outcome.kind !== 'result') return failure('unavailable');
-        if (!validStatus(outcome.value, maxResponseBytes)) return failure('invalid_response');
+        const snapshot = snapshotStatus(outcome.value, maxResponseBytes);
+        if (!snapshot) return failure('invalid_response');
         return {
           ok: true,
           kind: 'synthetic_result',
           capabilityId: capability.id,
           evidence_status: capability.evidence_status,
-          data: { state: outcome.value.state, observed_at: outcome.value.observed_at },
+          data: snapshot,
         };
       } finally {
         clearTimeout(timer);
