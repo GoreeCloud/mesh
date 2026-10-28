@@ -58,6 +58,23 @@ test('malformed and hostile request envelopes return typed denial instead of thr
   }
 });
 
+test('request inspection rejects accessors and hidden fields without evaluating them', async () => {
+  const h = harness();
+  let getterCalls = 0;
+  const accessor = Object.defineProperty({ capabilityId }, 'actor', {
+    enumerable: true,
+    get() { getterCalls++; return 'fixture.reader'; },
+  });
+  assert.equal((await h.read(accessor)).error.code, 'unsupported');
+  assert.equal(getterCalls, 0, 'request getters must not execute');
+  const normal = { actor: 'fixture.reader', capabilityId, operation: 'status.read' };
+  const hidden = Object.defineProperty({ ...normal }, 'secret', { value: 'never accepted' });
+  const symbol = { ...normal, [Symbol('secret')]: 'never accepted' };
+  for (const envelope of [hidden, symbol]) {
+    assert.equal((await h.read(envelope)).error.code, 'unsupported');
+  }
+});
+
 test('Mesh and owner both independently default deny', async () => {
   let ownerCalls = 0;
   const adapters = { [capabilityId]: fixtureAdapter({
