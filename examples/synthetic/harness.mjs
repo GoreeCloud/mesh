@@ -88,11 +88,19 @@ export function createSyntheticHarness({
       // proxies or undeclared payload fields escape as uncaught exceptions.
       let actor, capabilityId, operation;
       try {
-        if (!plain(request) || Object.keys(request).some(key =>
-          !['actor', 'capabilityId', 'operation'].includes(key))) return failure('unsupported');
-        actor = request.actor;
-        capabilityId = request.capabilityId;
-        operation = own(request, 'operation') ? request.operation : 'status.read';
+        if (!plain(request)) return failure('unsupported');
+        // Requests may be supplied by untrusted callers. Inspect descriptors
+        // without invoking getters and reject symbols or hidden payload fields.
+        const keys = Reflect.ownKeys(request);
+        if (keys.some(key => !['actor', 'capabilityId', 'operation'].includes(key))) {
+          return failure('unsupported');
+        }
+        const fields = Object.getOwnPropertyDescriptors(request);
+        if (!own(fields, 'actor') || !own(fields, 'capabilityId') ||
+            keys.some(key => !own(fields[key], 'value'))) return failure('unsupported');
+        actor = fields.actor.value;
+        capabilityId = fields.capabilityId.value;
+        operation = own(fields, 'operation') ? fields.operation.value : 'status.read';
       } catch {
         return failure('unsupported');
       }
