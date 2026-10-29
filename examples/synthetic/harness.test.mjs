@@ -123,6 +123,40 @@ test('hung owner decisions and reads have bounded typed timeouts', async () => {
   assert.equal((await read(operation)).error.code, 'timed_out');
 });
 
+test('timed-out Mesh authorization cannot start late owner work', async () => {
+  let resolvePermit;
+  let ownerCalls = 0;
+  const delayed = new Promise(resolve => { resolvePermit = resolve; });
+  const h = harness({
+    timeoutMs: 15,
+    meshPermit: () => delayed,
+    adapters: { [capabilityId]: fixtureAdapter({
+      authorize: () => { ownerCalls++; return true; },
+    }) },
+  });
+  assert.equal((await read(h)).error.code, 'timed_out');
+  resolvePermit(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ownerCalls, 0, 'timed-out requests must not invoke owner authorization');
+});
+
+test('timed-out owner authorization cannot start late owner reads', async () => {
+  let resolveOwner;
+  let readCalls = 0;
+  const delayed = new Promise(resolve => { resolveOwner = resolve; });
+  const h = harness({
+    timeoutMs: 15,
+    adapters: { [capabilityId]: fixtureAdapter({
+      authorize: () => delayed,
+      readStatus: () => { readCalls++; return status(); },
+    }) },
+  });
+  assert.equal((await read(h)).error.code, 'timed_out');
+  resolveOwner(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(readCalls, 0, 'timed-out requests must not invoke owner reads');
+});
+
 test('stale, duplicate or non-synthetic manifests are rejected before use', () => {
   const wrong = [
     { ...manifest, schema_version: 'mesh.capabilities.v0' },
