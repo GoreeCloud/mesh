@@ -121,6 +121,8 @@ export function createSyntheticHarness({
         // Fail closed for absent, false, throwing or rejected authorization.
         try {
           if (await meshPermit(actor, capability) !== true) return { kind: 'denied' };
+          // A delayed Mesh permit must not start owner work after timeout.
+          if (controller.signal.aborted) return { kind: 'denied' };
         } catch {
           return { kind: 'denied' };
         }
@@ -131,6 +133,8 @@ export function createSyntheticHarness({
           if (await adapter.authorize(actor, capability, { signal: controller.signal }) !== true) {
             return { kind: 'denied' };
           }
+          // Owner authorization may settle after the response was timed out.
+          if (controller.signal.aborted) return { kind: 'denied' };
         } catch {
           return { kind: 'denied' };
         }
