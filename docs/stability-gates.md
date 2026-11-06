@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Proposed engineering acceptance gates, not an implementation claim |
-| Checked | 2026-10-26 |
+| Checked | 2026-11-06 (targeted privacy/security boundary review) |
 | Scope | Mesh interactions with GoreeCloud Identity, GoreeShield, Wardveil, and GoreeCloud UI |
 
 ## Verified baseline
@@ -38,6 +38,21 @@ No live data export, automatic writes, production MCP tools, webhook ingress or 
 | Mesh | Routing, inventory, execution and diagnostics | Denial, isolation, replay, outage, recovery and upgrade tests |
 
 The owning service must independently enforce protected actions. A capability becoming *discoverable* does not make it *authorized* or *healthy*. Distinguish `planned`, `prototype`, `verified`, `blocked`, and `retired`; only evidence-backed capabilities may report `verified`.
+
+## Cross-pillar privacy and cybersecurity acceptance cases (proposed)
+
+GoreeShield governs **privacy** decisions and personal-data handling; Wardveil governs **cybersecurity** detection, defense and response. Mesh is the integration transport/coordinator, not a substitute consent authority, security enforcement engine, or universal policy override. These are **proposed tests for future real connectors**; the current synthetic discovery harness has no live privacy integration.
+
+For a Mesh flow that requires a privacy choice, consent, or other applicable GoreeShield decision, acceptance evidence must show that:
+
+1. A missing, withdrawn, expired, invalid, wrong-subject, wrong-purpose, or unsupported-version privacy decision never authorizes that optional processing or disclosure. A response timeout or unavailable GoreeShield interface does not silently become an approval.
+2. Required decisions are evaluated against the actual data subject, purpose, recipient and relevant processing action, using an approved contract. A synthetic fixture or cached success cannot be treated as live authorization.
+3. Both Mesh and the **owning source service** deny an inapplicable or unauthorized data transfer. No personal payload crosses a boundary before the owner confirms applicable policy. Replays, retries and asynchronous callbacks cannot resurrect revoked choices.
+4. Privacy denial is not logged as a security threat by default. Wardveil may receive only authorized, minimized security-relevant telemetry; routine consent, private content or identity data is not automatically shared with it.
+5. Evidence records distinguish an attempted request, a locally allowed decision, a source-observed outcome and a confirmed completed action. A transport acknowledgment or connector success never proves an external deletion, withdrawal or data-rights fulfillment.
+6. Essential functions that do **not** require optional consent are not indiscriminately disabled: document the lawful/authorized processing basis and the scoped policy boundary for each operation. Do not fabricate a consent requirement or treat transient GoreeShield outages as permission to export data.
+
+Before promotion, validate these cases with negative tests, contract version checks, outage/recovery tests, purpose-bound state changes, and minimal audit evidence. No implementation or end-to-end result is asserted here.
 
 ## Release gates
 
