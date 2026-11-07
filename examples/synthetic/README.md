@@ -6,7 +6,7 @@ Run `npm test` for contract tests or `npm run demo` for an inert example. The de
 
 Contract rules:
 
-- `mesh.capabilities.v1` declares only `synthetic-local-only` records with a bounded, unique capability ID and `status.read` operation. A discovered record stays `prototype` and carries **zero implicit authority**.
+- `mesh.capabilities.v1` declares only `synthetic-local-only` records with a bounded, unique capability ID and `status.read` operation. Manifest and capability fields are snapshotted from exact own data descriptors; hostile getters, sparse/accessor array entries, symbols, undeclared properties and throwing proxy traps are rejected without executing getter bodies. A discovered record stays `prototype` and carries **zero implicit authority**.
 - Mesh policy and the simulated owning adapter must each approve an actor. All absent/throwing/false decisions are denied. Adapter registration and method lookup require plain own data descriptors; getters, inherited methods and throwing proxy traps cannot trigger owner work. No write operation is supported.
 - Outcomes are typed `unsupported`, `denied`, `unavailable`, `timed_out`, or `invalid_response`. Reads have a maximum one-second configurable execution budget and a 4 KiB maximum output ceiling; fixture defaults are 100 ms and 1 KiB.
 - Accepted result data is limited to a strictly shaped synthetic status, never arbitrary logs or user payload. No central request/payload logging exists.
