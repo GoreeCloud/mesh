@@ -126,11 +126,30 @@ export function createSyntheticHarness({
         } catch {
           return { kind: 'denied' };
         }
-        const adapter = own(adapters, capability.id) ? adapters[capability.id] : null;
-        if (!plain(adapter) || typeof adapter.authorize !== 'function' ||
-            typeof adapter.readStatus !== 'function') return { kind: 'unavailable' };
+        // An adapter registry is untrusted. A getter (or proxy trap) must never
+        // execute just because Mesh discovered a capability or selected an owner.
+        // Snapshot methods from own data descriptors once, then call only those.
+        let adapter, authorize, readStatus;
         try {
-          if (await adapter.authorize(actor, capability, { signal: controller.signal }) !== true) {
+          const registered = Object.getOwnPropertyDescriptor(adapters, capability.id);
+          if (!registered || !own(registered, 'value') || !plain(registered.value)) {
+            return { kind: 'unavailable' };
+          }
+          adapter = registered.value;
+          const methods = Object.getOwnPropertyDescriptors(adapter);
+          if (!own(methods, 'authorize') || !own(methods, 'readStatus') ||
+              !own(methods.authorize, 'value') || !own(methods.readStatus, 'value') ||
+              typeof methods.authorize.value !== 'function' ||
+              typeof methods.readStatus.value !== 'function') {
+            return { kind: 'unavailable' };
+          }
+          authorize = methods.authorize.value;
+          readStatus = methods.readStatus.value;
+        } catch {
+          return { kind: 'unavailable' };
+        }
+        try {
+          if (await Reflect.apply(authorize, adapter, [actor, capability, { signal: controller.signal }]) !== true) {
             return { kind: 'denied' };
           }
           // Owner authorization may settle after the response was timed out.
@@ -139,7 +158,7 @@ export function createSyntheticHarness({
           return { kind: 'denied' };
         }
         try {
-          return { kind: 'result', value: await adapter.readStatus({ signal: controller.signal }) };
+          return { kind: 'result', value: await Reflect.apply(readStatus, adapter, [{ signal: controller.signal }]) };
         } catch {
           return { kind: 'unavailable' };
         }
