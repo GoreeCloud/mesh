@@ -205,3 +205,56 @@ test('owner data is captured once and returned as inert primitives', async () =>
   source.state = 'degraded';
   assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
 });
+
+test('untrusted adapter descriptors fail closed without calling registry getters or throwing', async () => {
+  let getterCalls = 0;
+  const registry = Object.defineProperty({}, capabilityId, {
+    enumerable: true,
+    get() { getterCalls++; throw Error('untrusted registration getter'); },
+  });
+  const fromGetter = await read(harness({ adapters: registry }));
+  assert.deepEqual(fromGetter, { ok: false, error: { code: 'unavailable' } });
+  assert.equal(getterCalls, 0, 'registration getter must never run');
+
+  const hostileRegistry = new Proxy({}, {
+    getOwnPropertyDescriptor() { throw Error('registry proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: hostileRegistry }))).error.code, 'unavailable');
+
+  const hostileAdapter = new Proxy({}, {
+    ownKeys() { throw Error('adapter proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: { [capabilityId]: hostileAdapter } }))).error.code, 'unavailable');
+});
+
+test('owner accessors and inherited functions cannot masquerade as approved adapter methods', async () => {
+  let getterCalls = 0;
+  const authorizeGetter = Object.defineProperty({ readStatus: async () => status() }, 'authorize', {
+    enumerable: true,
+    get() { getterCalls++; return () => true; },
+  });
+  const readGetter = Object.defineProperty({ authorize: () => true }, 'readStatus', {
+    enumerable: true,
+    get() { getterCalls++; return async () => status(); },
+  });
+  const inherited = Object.create({ authorize: () => true, readStatus: async () => status() });
+  for (const adapter of [authorizeGetter, readGetter, inherited]) {
+    const response = await read(harness({ adapters: { [capabilityId]: adapter } }));
+    assert.equal(response.error.code, 'unavailable');
+  }
+  assert.equal(getterCalls, 0, 'owner adapter getters must never run');
+});
+
+test('method snapshot preserves adapter receiver and cannot be swapped mid-authorization', async () => {
+  const adapter = {
+    allowed: true,
+    authorize() {
+      this.readStatus = () => { throw Error('method changed after authorization'); };
+      return this.allowed;
+    },
+    async readStatus() { return status(); },
+  };
+  const result = await read(harness({ adapters: { [capabilityId]: adapter } }));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+});
