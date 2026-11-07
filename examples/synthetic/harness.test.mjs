@@ -258,3 +258,66 @@ test('method snapshot preserves adapter receiver and cannot be swapped mid-autho
   assert.equal(result.ok, true);
   assert.deepEqual(result.data, status());
 });
+
+test('manifest snapshots reject getters without executing them', () => {
+  let getterCalls = 0;
+  const parentGetter = Object.defineProperty({ ...manifest }, 'schema_version', {
+    enumerable: true,
+    get() { getterCalls++; return 'mesh.capabilities.v1'; },
+  });
+  const arrayGetter = [...manifest.capabilities];
+  Object.defineProperty(arrayGetter, '0', {
+    enumerable: true,
+    get() { getterCalls++; return manifest.capabilities[0]; },
+  });
+  const capGetter = Object.defineProperty({ ...manifest.capabilities[0] }, 'id', {
+    enumerable: true,
+    get() { getterCalls++; return capabilityId; },
+  });
+  for (const invalid of [
+    parentGetter,
+    { ...manifest, capabilities: arrayGetter },
+    { ...manifest, capabilities: [capGetter] },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+  assert.equal(getterCalls, 0, 'manifest getters must not execute');
+});
+
+test('proxy traps, undeclared array data and sparse manifests fail closed', () => {
+  const throwing = new Proxy({}, {
+    ownKeys() { throw Error('manifest proxy trap'); },
+  });
+  const throwingCapability = new Proxy({}, {
+    ownKeys() { throw Error('capability proxy trap'); },
+  });
+  const sparse = new Array(2);
+  sparse[0] = manifest.capabilities[0];
+  const extra = [...manifest.capabilities];
+  extra.hidden = 'unexpected';
+  const symbol = [...manifest.capabilities];
+  symbol[Symbol('hidden')] = true;
+  for (const invalid of [
+    throwing,
+    { ...manifest, capabilities: [throwingCapability] },
+    { ...manifest, capabilities: sparse },
+    { ...manifest, capabilities: extra },
+    { ...manifest, capabilities: symbol },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+});
+
+test('validated discovery cannot be changed through original manifest mutation', () => {
+  const mutable = {
+    ...manifest,
+    capabilities: manifest.capabilities.map(capability => ({ ...capability })),
+  };
+  const h = createSyntheticHarness({ manifest: mutable });
+  const before = h.discover();
+  mutable.capabilities[0].owner = 'fixture.changed';
+  mutable.capabilities[0].evidence_status = 'verified';
+  mutable.capabilities.splice(0, 1);
+  assert.deepEqual(h.discover(), before);
+  assert.equal(h.discover()[0].evidence_status, 'prototype');
+});
