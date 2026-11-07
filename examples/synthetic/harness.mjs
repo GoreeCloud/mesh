@@ -11,21 +11,59 @@ function plain(value) {
     (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 }
 
-function exactKeys(value, keys) {
-  return plain(value) && Object.keys(value).length === keys.length && keys.every(key => own(value, key));
+// Manifest objects are untrusted. Snapshot only own data descriptors: do not
+// invoke a getter or copy a field whose value can change during validation.
+function snapshotFields(value, expected) {
+  try {
+    if (!plain(value)) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const data = Object.create(null);
+    for (const key of expected) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !own(descriptor, 'value')) return null;
+      data[key] = descriptor.value;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotEntries(value) {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const size = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+    if (!Number.isInteger(size) || size < 1 || size > 32) return null;
+    // Reject sparse arrays, accessor elements, symbols, and undeclared properties.
+    if (Reflect.ownKeys(value).length !== size + 1) return null;
+    const entries = [];
+    for (let i = 0; i < size; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor || !own(descriptor, 'value')) return null;
+      entries.push(descriptor.value);
+    }
+    return entries;
+  } catch {
+    return null;
+  }
 }
 
 export function validateManifest(manifest) {
-  if (!exactKeys(manifest, ['schema_version', 'environment', 'capabilities']) ||
-      manifest.schema_version !== CONTRACT_VERSION ||
-      manifest.environment !== 'synthetic-local-only' ||
-      !Array.isArray(manifest.capabilities) || manifest.capabilities.length < 1 ||
-      manifest.capabilities.length > 32) {
+  const fields = snapshotFields(manifest, ['schema_version', 'environment', 'capabilities']);
+  const entries = fields && snapshotEntries(fields.capabilities);
+  if (!fields || fields.schema_version !== CONTRACT_VERSION ||
+      fields.environment !== 'synthetic-local-only' || !entries) {
     throw new TypeError('invalid synthetic capability manifest');
   }
   const ids = new Set();
-  return manifest.capabilities.map(capability => {
-    if (!exactKeys(capability, ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status']) ||
+  const inventory = [];
+  for (const candidate of entries) {
+    const capability = snapshotFields(candidate, [
+      'id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status',
+    ]);
+    if (!capability ||
         typeof capability.id !== 'string' || !ID.test(capability.id) ||
         typeof capability.owner !== 'string' || !ID.test(capability.owner) ||
         capability.version !== '0.0.1-fixture' || capability.operation !== 'status.read' ||
@@ -34,8 +72,9 @@ export function validateManifest(manifest) {
       throw new TypeError('invalid or duplicate synthetic capability');
     }
     ids.add(capability.id);
-    return Object.freeze({ ...capability });
-  });
+    inventory.push(Object.freeze(capability));
+  }
+  return inventory;
 }
 
 function failure(code) {
