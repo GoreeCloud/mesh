@@ -106,10 +106,37 @@ function snapshotStatus(value, maxResponseBytes) {
  * All adapters are in-process fixtures. Discovery does not authorize execution.
  * Both meshPermit and the owner adapter must explicitly approve each read.
  */
-export function createSyntheticHarness({
-  manifest, adapters = Object.create(null), meshPermit = () => false,
-  timeoutMs = 100, maxResponseBytes = 1024,
-} = {}) {
+// The enclosing configuration is also an untrusted boundary: parameter
+// destructuring itself would invoke malicious getters before validation.
+function snapshotOptions(value) {
+  try {
+    if (!plain(value)) return null;
+    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes']);
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => !allowed.has(key))) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const options = {
+      manifest: undefined,
+      adapters: Object.create(null),
+      meshPermit: () => false,
+      timeoutMs: 100,
+      maxResponseBytes: 1024,
+    };
+    for (const key of keys) {
+      if (!own(descriptors[key], 'value')) return null;
+      // Match default-parameter behavior for explicitly undefined options.
+      if (descriptors[key].value !== undefined) options[key] = descriptors[key].value;
+    }
+    return options;
+  } catch {
+    return null;
+  }
+}
+
+export function createSyntheticHarness(options = {}) {
+  const config = snapshotOptions(options);
+  if (!config) throw new TypeError('invalid synthetic harness options');
+  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes } = config;
   const inventory = validateManifest(manifest);
   if (!plain(adapters) || typeof meshPermit !== 'function' ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
