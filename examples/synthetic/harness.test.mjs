@@ -321,3 +321,42 @@ test('validated discovery cannot be changed through original manifest mutation',
   assert.deepEqual(h.discover(), before);
   assert.equal(h.discover()[0].evidence_status, 'prototype');
 });
+
+test('harness options reject getters, symbols and proxy traps before evaluating them', () => {
+  let invoked = 0;
+  const options = {
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+  };
+  for (const field of ['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes']) {
+    const poisoned = Object.defineProperty({ ...options }, field, {
+      enumerable: true,
+      get() { invoked++; throw Error('untrusted configuration getter'); },
+    });
+    assert.throws(() => createSyntheticHarness(poisoned), TypeError);
+  }
+  assert.equal(invoked, 0, 'construction must not invoke outer-option getters');
+  const throwing = new Proxy({}, { ownKeys() { throw Error('options proxy trap'); } });
+  const symbol = { ...options, [Symbol('hidden')]: true };
+  const hidden = Object.defineProperty({ ...options }, 'secret', { value: 'unapproved' });
+  const inherited = Object.create({ manifest });
+  for (const invalid of [throwing, symbol, hidden, inherited, null, []]) {
+    assert.throws(() => createSyntheticHarness(invalid), TypeError);
+  }
+});
+
+test('explicit undefined options retain safe default behavior', async () => {
+  const h = createSyntheticHarness({
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+    timeoutMs: undefined,
+    maxResponseBytes: undefined,
+  });
+  const result = await read(h);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+  const defaultDeny = createSyntheticHarness({ manifest, meshPermit: undefined });
+  assert.equal((await read(defaultDeny)).error.code, 'denied');
+});
