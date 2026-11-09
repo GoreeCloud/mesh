@@ -2,19 +2,19 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed engineering acceptance gates, not an implementation claim |
-| Checked | 2026-11-07 (targeted source and synthetic boundary review) |
+| Status | Verified local development baseline plus proposed real-integration acceptance gates; no production claim |
+| Checked | 2026-11-09 (Mesh source and CI readback; Wardveil health contract inspected) |
 | Scope | Mesh interactions with GoreeCloud Identity, GoreeShield, Wardveil, and GoreeCloud UI |
 
 ## Verified baseline
 
-`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded, in-memory `mesh.synthetic-evidence.v1` outcome observer, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
+`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded in-memory `mesh.synthetic-evidence.v1` outcome observer, native in-flight admission, a transport-injected Wardveil health acceptance fixture with disposable real-loopback HTTP tests, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
 
 Related maturity varies: GoreeShield has Linux synthetic work in unmerged draft PRs; Wardveil has a development-only event service; GC UI has passing quality gates but incomplete consumer adoption. Their experimental surfaces are **not automatically stable Mesh dependencies**. Identity integration requires a separate trust decision.
 
 ## First implementation slice (reference fixture; not production)
 
-The existing reference fixture provides a **local, read-only** discovery path using two fictional adapters and a versioned capability manifest. It uses no production accounts, secrets, third-party connections, public listener, or cross-system mutation. A demonstration does not establish a live product integration. Untrusted registration accessors and method descriptors require explicit negative regression coverage before promoting even this fixture.
+The existing reference fixture provides a **local, read-only** discovery path using two fictional adapters and a versioned capability manifest. It uses no production accounts, secrets, third-party connections, public listener, or cross-system mutation. A demonstration does not establish a live product integration. The descriptor, proxy, denial, native-concurrency, response-shape and redacted-outcome negative regressions are implemented and exercised in the fixture CI. This does not promote any real service.
 
 Acceptance tests for the first slice must cover:
 
@@ -68,9 +68,9 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 ## Ordered follow-up
 
-1. **Synthetic-only completed:** Descriptor hardening from PR #8 and the opt-in `mesh.synthetic-evidence.v1` observer from PR #11 are merged. The observer has bounded in-memory retention, local correlation IDs, a maximum in-flight limit and redacted outcome-only records; the fixture suite and GitHub CI exercise this local reference contract. These are not real owner authorization or telemetry evidence.
+1. **Development-only completed:** #8 hardened descriptors; #11 introduced opt-in bounded redacted evidence; #15 added native in-flight admission; #16 added the inspected Wardveil `/healthz` response contract; #17 tightened diagnostic shape validation; #18 added fixed 127.0.0.1-only, bounded HTTP transport acceptance tests. Exact-head and post-merge fixture CI pass. These are **not** authenticated Wardveil Go runtime evidence, production telemetry or source-owned access grants.
 2. Define and review the separate **real integration** correlation-ID, privacy classification, retention, trace propagation and audit-evidence contract with owning systems. Require source-observed outcomes and ensure optional consent and sensitive payloads never enter Mesh logs by default.
-3. Validate one real owner contract in nonproduction **after** Identity, GoreeShield, Wardveil and source-owner readiness gates pass, including denial, revocation, outage and recovery.
+3. Validate the real Wardveil Go `/healthz` endpoint against the pinned fixture in an authorized isolated nonproduction runtime (not a VPS). Then obtain a source-owned versioned contract and independently test Identity, privacy/security applicability, denial, revocation, outage, recovery and rollback before extending Mesh to sensitive endpoints.
 4. Consider write orchestration only after scoped authorization, idempotency, approval, rollback and source-observed outcomes are tested.
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
