@@ -1,0 +1,63 @@
+name: Pinned VPN Python source and Mesh health contract (isolated)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  vpn-python-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Mesh without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # official v7 verified upstream
+        with:
+          persist-credentials: false
+      - name: Checkout immutable, reviewed VPN source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/VPN
+          ref: 13973c531d9c9147cdd353c06656e7ae4a796cf8
+          path: vpn-source
+          persist-credentials: false
+      - name: Setup Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # official v5 verified upstream
+        with:
+          python-version: '3.12'
+          cache: false
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # official v4 verified upstream
+        with:
+          node-version: '24'
+      - name: Verify exact upstream source, blob identity and dependency-free runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C vpn-source rev-parse HEAD)" = "13973c531d9c9147cdd353c06656e7ae4a796cf8"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/server.py)" = "d43c64e12c750205adc567e1cb4ba8ab4923685c"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/core.py)" = "b306bdb9287e84a188aa518c65c7beff01270929"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/plan.py)" = "4aaa06fb822182b1d298a1cc200920f2eac85282"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/diagnostics.py)" = "bcf9b40d980e7178d8bf6680bbfdab51711ab2be"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/__init__.py)" = "d964db1db674fedab9423f5cda49e7a5f230d2e0"
+          test "$(git -C vpn-source hash-object pyproject.toml)" = "646d276e1aae860ccb4d4218e012614720ba9022"
+          python3 - <<'PY'
+          from pathlib import Path
+          import tomllib
+          data = tomllib.loads(Path('vpn-source/pyproject.toml').read_text())
+          assert data['project']['dependencies'] == []
+          assert data['project']['version'] == '0.1.0a1'
+          PY
+      - name: Compile and unit-test pinned Python management source without installing packages
+        shell: bash
+        env:
+          PYTHONPATH: vpn-source/src
+          PIP_NO_INDEX: '1'
+        run: |
+          python3 -m compileall -q vpn-source/src/goreecloud_vpn
+          python3 -m unittest discover -s vpn-source/tests -p test_http.py -v
+      - name: Exercise genuine Python management and strict Mesh fixture on owned loopback
+        shell: bash
+        env:
+          GC_MESH_VPN_ISOLATED_TEST: '1'
+        run: node examples/owner-contracts/vpn-real-python.smoke.mjs ./vpn-source
