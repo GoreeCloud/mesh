@@ -74,7 +74,7 @@ function loopback(port, path = '/healthz', token = '', origin = '') {
       res.setEncoding('utf8');
       res.on('data', chunk => {
         body += chunk;
-        if (Buffer.byteLength(body, 'utf8') > 256) {
+        if (Buffer.byteLength(body, 'utf8') > (path === '/healthz' ? 256 : 4096)) {
           req.destroy(new Error('bounded source reply exceeded limit'));
         }
       });
