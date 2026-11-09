@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSyntheticReadObserver, EVIDENCE_VERSION } from './evidence.mjs';
 
-const ok = () => ({ ok: true, kind: 'synthetic_result', data: { secret: 'not logged' } });
+const ok = () => ({
+  ok: true,
+  kind: 'synthetic_result',
+  capabilityId: 'fixture.alpha.status',
+  evidence_status: 'prototype',
+  data: { state: 'ok', observed_at: '2026-11-09T00:00:00.000Z' },
+});
 const goodHarness = (reply = ok()) => ({ read: async () => reply });
 
 test('opt-in observer returns unchanged response with locally generated correlation ID', async () => {
@@ -20,7 +26,7 @@ test('opt-in observer returns unchanged response with locally generated correlat
 });
 
 test('denial is preserved and only its allowed outcome is recorded', async () => {
-  const denied = { ok: false, error: { code: 'denied', message: 'never log me' } };
+  const denied = { ok: false, error: { code: 'denied' } };
   const observer = createSyntheticReadObserver(goodHarness(denied));
   assert.strictEqual((await observer.read()).response, denied);
   assert.equal(observer.records()[0].outcome, 'denied');
@@ -95,4 +101,45 @@ test('unknown error codes fail closed in evidence without changing response', as
   const observer = createSyntheticReadObserver(goodHarness(exotic));
   assert.strictEqual((await observer.read()).response, exotic);
   assert.equal(observer.records()[0].outcome, 'invalid_response');
+});
+
+test('diagnostics reject fabricated success and accessor-backed success envelopes', async () => {
+  let getters = 0;
+  const poisoned = Object.defineProperty({ ...ok() }, 'data', {
+    get() { getters++; throw Error('private status'); },
+  });
+  const extras = { ...ok(), credentials: 'private' };
+  const corrupt = [
+    { ok: true, kind: 'synthetic_result' },
+    { ...ok(), capabilityId: 42 },
+    { ...ok(), evidence_status: 'verified' },
+    { ...ok(), data: { state: 'ok', observed_at: 'invalid' } },
+    { ...ok(), data: { ...ok().data, secret: 'not allowed' } },
+    { ...ok(), data: { state: 'ok', observed_at: ok().data.observed_at, extra: true } },
+    extras,
+    poisoned,
+    new Proxy({}, { ownKeys() { throw Error('proxy trap'); } }),
+  ];
+  for (const original of corrupt) {
+    const observer = createSyntheticReadObserver(goodHarness(original));
+    assert.strictEqual((await observer.read()).response, original);
+    assert.equal(observer.records()[0].outcome, 'invalid_response');
+    assert.doesNotMatch(JSON.stringify(observer.records()), /private|secret|credentials/);
+  }
+  assert.equal(getters, 0);
+});
+
+test('diagnostics require exact failure envelope and exact known error code', async () => {
+  const malformed = [
+    { ok: false, error: { code: 'denied', message: 'secret' } },
+    { ok: false, error: { code: 'denied' }, source: 'secret' },
+    { ok: false, error: { code: 200 } },
+    { ok: false, error: { code: 'made-up' } },
+  ];
+  for (const response of malformed) {
+    const observer = createSyntheticReadObserver(goodHarness(response));
+    assert.strictEqual((await observer.read()).response, response);
+    assert.equal(observer.records()[0].outcome, 'invalid_response');
+    assert.doesNotMatch(JSON.stringify(observer.records()), /secret/);
+  }
 });

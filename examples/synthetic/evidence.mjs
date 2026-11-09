@@ -31,20 +31,49 @@ function optionsSnapshot(value) {
   }
 }
 
-// Only allow a fixed synthetic outcome vocabulary into the evidence ring.
+// Evidence is not success merely because a source supplies ok:true.
+// Snapshot the *complete* synthetic contract shape without evaluating getters.
+function snapshotExact(value, expected) {
+  if (!plain(value)) return null;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) return null;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const copy = Object.create(null);
+  for (const key of expected) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !own(descriptor, 'value')) return null;
+    copy[key] = descriptor.value;
+  }
+  return copy;
+}
+
+// Only a strictly shaped successful read is logged as ok. The original response
+// is passed through unmodified even when its diagnostics are invalid_response.
 function outcomeOf(response) {
   try {
-    if (!plain(response)) return 'invalid_response';
-    const fields = Object.getOwnPropertyDescriptors(response);
-    if (fields.ok?.value === true && fields.kind?.value === 'synthetic_result') return 'ok';
-    if (fields.ok?.value !== false || !own(fields.error ?? {}, 'value')) return 'invalid_response';
-    const error = fields.error.value;
-    if (!plain(error)) return 'invalid_response';
-    const code = Object.getOwnPropertyDescriptor(error, 'code');
-    return code && own(code, 'value') && FAILURE_CODES.has(code.value) ? code.value : 'invalid_response';
+    const success = snapshotExact(response, ['ok', 'kind', 'capabilityId', 'evidence_status', 'data']);
+    if (success && success.ok === true && success.kind === 'synthetic_result' &&
+        typeof success.capabilityId === 'string' &&
+        /^[a-z][a-z0-9.-]{1,63}$/.test(success.capabilityId) &&
+        success.evidence_status === 'prototype') {
+      const data = snapshotExact(success.data, ['state', 'observed_at']);
+      if (data && (data.state === 'ok' || data.state === 'degraded') &&
+          typeof data.observed_at === 'string' && data.observed_at.length === 24) {
+        const time = Date.parse(data.observed_at);
+        if (Number.isFinite(time) && new Date(time).toISOString() === data.observed_at) {
+          return 'ok';
+        }
+      }
+    }
+    const failure = snapshotExact(response, ['ok', 'error']);
+    if (failure && failure.ok === false) {
+      const error = snapshotExact(failure.error, ['code']);
+      if (error && FAILURE_CODES.has(error.code)) return error.code;
+    }
   } catch {
-    return 'invalid_response';
+    // A throwing Proxy is always invalid evidence, not a successful operation.
   }
+  return 'invalid_response';
 }
 
 /**
