@@ -90,3 +90,15 @@ Identity, GoreeShield, Wardveil or Mesh integration. A future real connector
 requires owner authorization, release approval, explicit network policy,
 TLS/service authentication where appropriate and privacy review. Source pins
 must be rechecked when the two owner services change.
+
+## Wardveil opt-in source-authenticated status v1 (development only)
+
+Wardveil [PR #26](https://github.com/GoreeCloud/wardveil/pull/26) merged a dedicated, **disabled-by-default** status-only source API. The reviewed Go source is pinned in [the real Go CI workflow](../../.github/workflows/wardveil-real-go-contract.yml) at commit a79624bbe0846ca37192fc3dd9386901a9e57088. Enabling the development route requires a **third, distinct** WARDVEIL_STATUS_TOKEN (32–1024 bytes) in the local Wardveil process. This is not a substitute for GoreeCloud Identity, short-lived service identity, secure secrets lifecycle, TLS or production revocation.
+
+The only endpoint used by the new Mesh [Wardveil status v1 adapter](wardveil-status-v1.mjs) is authenticated **GET /v1/status**. The source-owned v1 response contains only schema_version, state (ok or degraded) and the server-observed UTC millisecond timestamp. The adapter requires the exact Go JSON wire form, cross-validates HTTP 200/503, rejects unknown/duplicate fields and stale/future observations more than 30 seconds from a trusted local clock. It preserves the source timestamp; it never exposes events or actor data in outcome evidence.
+
+[Scoped loopback transport](wardveil-status-loopback.mjs) is an **explicitly opted-in, token-bearing, IPv4 127.0.0.1-only** transport. It accepts only a reviewed port and status credential, fixes the request method/path, caps responses at 256 bytes, limits HTTP headers to 2 KiB with a unique Content-Type, enforces a 10–1000 ms deadline, and never follows redirects, contacts external hosts or exports tokens. Token syntax is validated, but this is not a cryptographic entropy guarantee. No arbitrary hostname, URL, event route, request payload or outbound destination is accepted.
+
+The fast npm test suite covers synthetic local adapter and HTTP negative cases without real credentials. The separate **pinned actual-Wardveil-Go CI smoke** exercises three independent credentials, source-side 401/403 cross-scope refusals, local Mesh+owner permit denial, status-only source timestamp projection, outage/unavailable and credential rotation by controlled restart. A successful fixture is not proof of full source-controlled actor permissions, production audit integrity, signed source attestations or operating readiness.
+
+**Default remains OFF:** Without the extra status environment secret, Go registers no /v1/status route (404). Existing unauthenticated /healthz and event APIs are not exposed or expanded by Mesh. Do not connect a non-test endpoint or deploy this service on a VPS based on this smoke.

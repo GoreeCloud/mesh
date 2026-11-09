@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/wardveil
-          ref: 41ff4766719e87a3f5399359d0e721cce5df9493
+          ref: a79624bbe0846ca37192fc3dd9386901a9e57088
           path: wardveil-source
           persist-credentials: false
       - name: Setup Wardveil's declared Go toolchain
@@ -39,10 +39,11 @@ jobs:
           GOTOOLCHAIN: 'local'
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = '41ff4766719e87a3f5399359d0e721cce5df9493'
-          test "$(git hash-object internal/httpapi/server.go)" = 'e4d8d68a9a1ed5c2fb28c6fc9c6956c2027c548a'
-          test "$(git hash-object cmd/wardveil/main.go)" = '094ce31c0cf8783283a625cc416b408de0b1318f'
+          test "$(git rev-parse HEAD)" = 'a79624bbe0846ca37192fc3dd9386901a9e57088'
+          test "$(git hash-object internal/httpapi/server.go)" = '1a4242df290422f0e4ecaa151e0fb694ff195151'
+          test "$(git hash-object cmd/wardveil/main.go)" = 'd8d249f8fcc64322957dd4d3fc12c30f9ebe0854'
           test "$(git hash-object internal/store/store.go)" = '0d2a92b8c3d4aadf774e03bedcfa61a3a3d26e6d'
+          test "$(git hash-object internal/httpapi/status_contract_test.go)" = '763eb5514b8e8ba16b5c0e87899d4f5c38600124'
           test "$(go list -m all)" = 'github.com/GoreeCloud/wardveil'
       - name: Build reviewed real Wardveil Go service without module network access
         working-directory: wardveil-source
@@ -61,7 +62,7 @@ jobs:
           GOPROXY: 'off'
           GOSUMDB: 'off'
           GOTOOLCHAIN: 'local'
-        run: go test -mod=readonly ./internal/httpapi -run '^TestUncertainJournalReturnsUnavailable$' -count=1
-      - name: Verify Mesh against genuine ephemeral Go process and restart
+        run: go test -mod=readonly ./internal/httpapi -run '^(TestUncertainJournalReturnsUnavailable|TestStatusContract.*)$' -count=1
+      - name: Verify Mesh health and status-only permissions against genuine Go process
         shell: bash
         run: node examples/owner-contracts/wardveil-real-go.smoke.mjs "$RUNNER_TEMP/wardveil-dev"

@@ -15,6 +15,8 @@ import { createSyntheticReadObserver, EVIDENCE_VERSION } from '../synthetic/evid
 import { manifest } from '../synthetic/fixtures.mjs';
 import { createWardveilHealthFixtureAdapter } from './wardveil-healthz.mjs';
 import { createLoopbackWardveilHealthTransport } from './wardveil-loopback.mjs';
+import { createLoopbackWardveilStatusTransport } from './wardveil-status-loopback.mjs';
+import { createWardveilScopedStatusAdapter } from './wardveil-status-v1.mjs';
 
 const capabilityId = 'fixture.alpha.status';
 const clockValue = '2026-11-09T00:00:00.000Z';
@@ -33,7 +35,7 @@ async function pickUnprivilegedLoopbackPort() {
   return address.port;
 }
 
-function startWardveil(binary, dir, port, ingestToken, readToken) {
+function startWardveil(binary, dir, port, ingestToken, readToken, statusToken) {
   const child = spawn(binary, [], {
     cwd: dir,
     env: {
@@ -41,6 +43,7 @@ function startWardveil(binary, dir, port, ingestToken, readToken) {
       WARDVEIL_DATA_DIR: join(dir, 'journal'),
       WARDVEIL_INGEST_TOKEN: ingestToken,
       WARDVEIL_READ_TOKEN: readToken,
+      WARDVEIL_STATUS_TOKEN: statusToken,
     },
     stdio: 'ignore',
   });
@@ -80,11 +83,14 @@ async function awaitHealthy(child, harness, read) {
   throw new Error('reviewed Wardveil Go development process did not become healthy on loopback');
 }
 
-async function unauthenticatedEventRouteStatus(port) {
+async function directProtectedRouteStatus(port, path, token = '', method = 'GET') {
+  assert.ok(['/v1/events', '/v1/status'].includes(path));
+  assert.ok(['GET', 'POST'].includes(method));
   return new Promise((resolveStatus, reject) => {
     const req = httpRequest({
       host: '127.0.0.1', family: 4, port,
-      method: 'GET', path: '/v1/events', agent: false,
+      method, path, agent: false,
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
     }, res => {
       const status = res.statusCode;
       // Do not ingest or log an event body. This request sends no token.
@@ -112,6 +118,8 @@ async function main() {
   await chmod(root, 0o700);
   const ingestToken = randomBytes(32).toString('hex');
   const readToken = randomBytes(32).toString('hex');
+  const statusToken = randomBytes(32).toString('hex');
+  const rotatedStatusToken = randomBytes(32).toString('hex');
   const port = await pickUnprivilegedLoopbackPort();
   const sourceTransport = createLoopbackWardveilHealthTransport({ port, timeoutMs: 400 });
   let transportCalls = 0;
@@ -128,6 +136,15 @@ async function main() {
     timeoutMs: 800,
   });
   const read = h => h.read({ actor: 'synthetic-ci-reader', capabilityId });
+  const scopedHarness = token => createSyntheticHarness({
+    manifest, meshPermit: () => meshAllowed, timeoutMs: 800,
+    adapters: { [capabilityId]: createWardveilScopedStatusAdapter({
+      transport: createLoopbackWardveilStatusTransport({ port, token, timeoutMs: 400 }),
+      permit: () => ownerAllowed,
+    }) },
+  });
+  const statusHarness = scopedHarness(statusToken);
+  const scopedRead = h => read(h);
   // Opt-in outcome-only diagnostics; no log sink, actor IDs, tokens or payload.
   const observer = createSyntheticReadObserver(harness, { capacity: 2, maxInFlight: 2 });
   const observedRead = () => observer.read({ actor: 'synthetic-ci-reader', capabilityId });
@@ -149,15 +166,26 @@ async function main() {
     assert.equal(transportCalls, beforeOwnerDeny);
     ownerAllowed = true;
 
-    child = startWardveil(expectedBinary, root, port, ingestToken, readToken);
+    child = startWardveil(expectedBinary, root, port, ingestToken, readToken, statusToken);
     await awaitHealthy(child, harness, read);
+    const scopedOk = await scopedRead(statusHarness);
+    assert.equal(scopedOk.ok, true);
+    assert.equal(scopedOk.data.state, 'ok');
+    assert.ok(Math.abs(Date.now() - Date.parse(scopedOk.data.observed_at)) < 30_000);
+    assert.notEqual(scopedOk.data.observed_at, clockValue);
     const firstEvidence = await observedRead();
     assert.equal(firstEvidence.response.ok, true);
     assert.match(firstEvidence.correlation_id, /^[a-f0-9-]{36}$/);
     assert.equal(observer.records()[0].schema_version, EVIDENCE_VERSION);
     assert.deepEqual(outcomeList(), ['ok']);
 
-    assert.equal(await unauthenticatedEventRouteStatus(port), 401);
+    // Real Go endpoint enforces three independently scoped credentials.
+    assert.equal(await directProtectedRouteStatus(port, '/v1/events'), 401);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/status'), 401);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/status', readToken), 403);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/status', ingestToken), 403);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/events', statusToken), 403);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/events', statusToken, 'POST'), 403);
 
     // Revocation is checked per request, not cached after a previous success.
     ownerAllowed = false;
@@ -168,6 +196,7 @@ async function main() {
     assert.equal(revokedEvidence.response.error.code, 'denied');
     assert.equal(transportCalls, beforeRevocation);
     assert.deepEqual(outcomeList(), ['ok', 'denied']);
+    assert.equal((await scopedRead(statusHarness)).error.code, 'denied');
     ownerAllowed = true;
     assert.equal((await read(harness)).data.state, 'ok');
 
@@ -177,17 +206,28 @@ async function main() {
     const downEvidence = await observedRead();
     assert.equal(downEvidence.response.error.code, 'unavailable');
     assert.deepEqual(outcomeList(), ['denied', 'unavailable']);
+    assert.equal((await scopedRead(statusHarness)).error.code, 'unavailable');
 
     // The exact reviewed Go service must reopen its private journal and recover
     // after a graceful stop; this is not a destructive crash recovery test.
-    child = startWardveil(expectedBinary, root, port, ingestToken, readToken);
+    child = startWardveil(expectedBinary, root, port, ingestToken, readToken, rotatedStatusToken);
     await awaitHealthy(child, harness, read);
+    // The prior bearer is rejected by the *source* following a controlled
+    // restart/credential rotation. No local callback is allowed to bypass it.
+    assert.equal(await directProtectedRouteStatus(port, '/v1/status', statusToken), 403);
+    assert.equal((await scopedRead(statusHarness)).error.code, 'unavailable');
+    const rotated = await scopedRead(scopedHarness(rotatedStatusToken));
+    assert.equal(rotated.ok, true);
+    assert.equal(rotated.data.state, 'ok');
+    assert.equal(await directProtectedRouteStatus(port, '/v1/events', rotatedStatusToken), 403);
     const recoveredEvidence = await observedRead();
     assert.equal(recoveredEvidence.response.ok, true);
     assert.deepEqual(outcomeList(), ['unavailable', 'ok']);
     const redacted = JSON.stringify(observer.records());
     assert.equal(redacted.includes(ingestToken), false);
     assert.equal(redacted.includes(readToken), false);
+    assert.equal(redacted.includes(statusToken), false);
+    assert.equal(redacted.includes(rotatedStatusToken), false);
     assert.equal(redacted.includes('synthetic-ci-reader'), false);
     assert.equal(redacted.includes('journal'), false);
     assert.deepEqual(Object.keys(observer.records()[0]).sort(), [
@@ -195,7 +235,7 @@ async function main() {
     ]);
     observer.clear();
     assert.deepEqual(observer.records(), []);
-    console.log('PASS: real Wardveil Go /healthz, Mesh denial/recovery and bounded redacted outcome evidence (isolated CI loopback)');
+    console.log('PASS: genuine Wardveil Go /healthz + authenticated /v1/status, independent bearer scopes, rotation, denial, recovery and redacted evidence (isolated CI)');
   } finally {
     await stopWardveil(child);
     await rm(root, { recursive: true, force: true });
