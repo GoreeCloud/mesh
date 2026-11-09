@@ -72,7 +72,7 @@ health responses:
   c78b5c2945cce463367026942ee9d5a203c2fe47.
 - Memos: GET /api/v1/health, HTTP 200, JSON status ok with service
   goreecloud-memos. Verified source: GoreeCloud/memos server/app.py Git blob
-  88b3e96631fac4cd78c5ab9e90981c0f696735e5.
+  0a87bf75d5d9f48e39043b45b869949c5bab5f5f.
 
 The new tasks-healthz.mjs, memos-health.mjs and exact-health-fixture.mjs
 provide **transport-injected synthetic-only** projections from these exact
@@ -93,8 +93,8 @@ must be rechecked when the two owner services change.
 
 **Source refresh, November 9, 2026:** Tasks development main
 a20229ae13753cda129fea9f1aac7111ea9a4150 and Memos development
-main a5366645ffbedd0381e98b756a0f1d62b76688dc were re-read
-after their HTTP-header hardening merges. Their two unauthenticated health
+main 712695010eb99ca32ab4957f7548e09b206fa774 were re-read
+after their HTTP-header and Memos localhost-only bind hardening merges. Their two unauthenticated health
 handler paths and response objects are unchanged; the pins above identify
 the newer reviewed source blobs. This does not make either prototype a
 real authenticated service connector.
