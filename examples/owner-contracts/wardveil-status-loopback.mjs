@@ -34,7 +34,8 @@ export function createLoopbackWardveilStatusTransport(options) {
   const timeoutMs = fields.timeoutMs ?? 500;
   const maxBytes = 256;
   if (!Number.isInteger(port) || port < 1024 || port > 65535 ||
-      typeof token !== 'string' || !/^[A-Za-z0-9._~+/-]{32,1024}={0,2}$/.test(token) ||
+      typeof token !== 'string' || token.length > 1024 ||
+      /^[A-Za-z0-9._~+/-]{32,1024}={0,2}$/.exec(token)?.[0] !== token ||
       !Number.isInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 1000) {
     throw new TypeError('invalid scoped status transport limits');
   }
@@ -74,13 +75,26 @@ export function createLoopbackWardveilStatusTransport(options) {
         }, res => {
           // Node may normalize duplicate response headers. Reject ambiguous
           // Content-Type at the raw wire boundary before trusting its value.
-          const contentTypes = [];
+          const securityHeaders = {
+            'content-type': [],
+            'cache-control': [],
+            'x-content-type-options': [],
+          };
           for (let i = 0; i < res.rawHeaders.length; i += 2) {
-            if (res.rawHeaders[i].toLowerCase() === 'content-type') {
-              contentTypes.push(res.rawHeaders[i + 1]);
+            const name = res.rawHeaders[i].toLowerCase();
+            if (Object.hasOwn(securityHeaders, name)) {
+              securityHeaders[name].push(res.rawHeaders[i + 1]);
             }
           }
-          if (contentTypes.length !== 1) {
+          // The reviewed Wardveil Go owner handler sets these metadata
+          // controls on all responses. Fail closed on omitted, duplicated,
+          // cacheable or spoofed metadata, not just the JSON body.
+          const contentTypes = securityHeaders['content-type'];
+          if (contentTypes.length !== 1 ||
+              securityHeaders['cache-control'].length !== 1 ||
+              securityHeaders['cache-control'][0] !== 'no-store' ||
+              securityHeaders['x-content-type-options'].length !== 1 ||
+              securityHeaders['x-content-type-options'][0] !== 'nosniff') {
             req.destroy();
             fail();
             return;
