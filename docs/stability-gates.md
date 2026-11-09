@@ -8,9 +8,19 @@
 
 ## Verified baseline
 
-`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded in-memory `mesh.synthetic-evidence.v1` outcome observer, native in-flight admission, a transport-injected Wardveil health acceptance fixture with disposable real-loopback HTTP tests, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
+`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded in-memory `mesh.synthetic-evidence.v1` outcome observer, native in-flight admission, a transport-injected Wardveil health acceptance fixture with disposable real-loopback HTTP tests, and GitHub Actions fixture and first-party Wardveil Go source-owned runtime workflows. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
 
 Related maturity varies: GoreeShield has Linux synthetic work in unmerged draft PRs; Wardveil has a development-only event service; GC UI has passing quality gates but incomplete consumer adoption. Their experimental surfaces are **not automatically stable Mesh dependencies**. Identity integration requires a separate trust decision.
+
+## Verified source-owned Go development acceptance (2026-11-09)
+
+- [PR #21](https://github.com/GoreeCloud/mesh/pull/21) added a separate hosted Linux CI job that checks out the inspected `GoreeCloud/wardveil` Go source at immutable commit `41ff4766719e87a3f5399359d0e721cce5df9493`, validates selected Git blobs and absence of third-party Go modules, then builds it with offline module access. Official GitHub setup/checkout actions are SHA-pinned; no persisted checkout credentials.
+- That job launches the **actual Go service** with random disposable credentials, a private temporary journal and a restricted `127.0.0.1` port. It validates health through the Mesh read-only fixture, deny-before-I/O, local revocation, unauthenticated direct event-list refusal, stop/unavailable and graceful restart. Separately, Wardveil's genuine Go handler test checks the **503** path after simulated journal failure; a process-level 503 test is **not** claimed.
+- [PR #22](https://github.com/GoreeCloud/mesh/pull/22) hardened loopback response metadata: duplicate `Content-Type` and headers over 2 KiB now fail closed.
+- [PR #23](https://github.com/GoreeCloud/mesh/pull/23) verified the opt-in diagnostic observer against the real Go process: strict success/denial/outage/recovery outcomes, bounded two-record retention, erasure, and no test tokens or actor identifiers in stored evidence.
+- At merged `main` `a4e3ffb33a79bc526d420c38b3c96877f7c9834b`, **all three post-merge CI checks passed** (Node 24 fixture, Wardveil Go contract, nonblocking editorial). This is stronger *nonproduction source compatibility evidence*, **not** production authorization, consent, uptime, a deployed connector, TLS, a signed health attestation, or a stable owner API contract.
+
+Unimplemented: owner-approved semantic API version, secure process/port identity, independently authenticated source-owned read authorization, tenant claims and real revocation through Identity, GoreeShield purpose/retention, Wardveil threat-policy governance, tested crash recovery and durability under fault, secure secret lifecycle, and operating/deployment controls.
 
 ## First implementation slice (reference fixture; not production)
 
@@ -68,9 +78,9 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 ## Ordered follow-up
 
-1. **Development-only completed:** #8 hardened descriptors; #11 introduced opt-in bounded redacted evidence; #15 added native in-flight admission; #16 added the inspected Wardveil `/healthz` response contract; #17 tightened diagnostic shape validation; #18 added fixed 127.0.0.1-only, bounded HTTP transport acceptance tests. Exact-head and post-merge fixture CI pass. These are **not** authenticated Wardveil Go runtime evidence, production telemetry or source-owned access grants.
+1. **Development-only verified:** #8, #11, #15–#18 established the synthetic baseline; #21 verified the actual inspected Wardveil Go service on disposable loopback; #22 hardened HTTP response metadata; #23 verified redacted evidence against the real Go runtime. Three post-merge checks passed at the documented current head. A working Go development service is not a production source-authorization grant, identity integration or signed Stable release.
 2. Define and review the separate **real integration** correlation-ID, privacy classification, retention, trace propagation and audit-evidence contract with owning systems. Require source-observed outcomes and ensure optional consent and sensitive payloads never enter Mesh logs by default.
-3. Validate the real Wardveil Go `/healthz` endpoint against the pinned fixture in an authorized isolated nonproduction runtime (not a VPS). Then obtain a source-owned versioned contract and independently test Identity, privacy/security applicability, denial, revocation, outage, recovery and rollback before extending Mesh to sensitive endpoints.
+3. Establish a **source-owned versioned and authenticated** Wardveil development API contract with Identity, Wardveil and applicable GoreeShield controls. Verify process/port ownership, trust roots, revocation, failure/recovery, data minimization and real owner-side enforcement before any further adapter or external connection; do not treat local callback denial as production access control.
 4. Consider write orchestration only after scoped authorization, idempotency, approval, rollback and source-observed outcomes are tested.
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
