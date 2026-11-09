@@ -47,3 +47,15 @@ const adapter = createWardveilHealthFixtureAdapter({
 ```
 
 `npm test` exercises both real-loopback happy and failure paths, still without contacting any physical VPS or household data source.
+
+## Source-owned Go runtime acceptance (opt-in hosted CI)
+
+The separate workflow [Wardveil source-owned Go/Mesh health contract](../../.github/workflows/wardveil-real-go-contract.yml) builds the **actual Wardveil Go development service** at a reviewed full source commit inside a temporary GitHub-hosted Linux runner. It uses SHA-pinned official GitHub checkout, Go setup and Node setup actions, a read-only GitHub token, no persisted checkout credentials, and no external Go module downloads. Before building it verifies the source commit, actual HTTP handler/main/store source Git blobs, and that the Go module has no third-party dependencies. This workflow is independent of the fast local-only Node fixture suite.
+
+The one-shot [Wardveil Go smoke](wardveil-real-go.smoke.mjs) runs the compiled executable against an ephemeral private journal and distinct random tokens. It selects an unprivileged IPv4 loopback port, then verifies that the Mesh harness and restricted transport can: deny unapproved requests without any transport attempt, accept the genuine Go service's healthy response, recheck denial after local revocation, report unavailable when the Go process exits, and recover a healthy read after a graceful restart. It also checks the Go endpoint's denial of a direct, unauthenticated event-list request; the **Mesh adapter itself never requests events**.
+
+Separately, the source-owned Wardveil Go handler test named TestUncertainJournalReturnsUnavailable exercises a journal append fault and expects genuine HTTP 503 degradation. A passing handler test is **not** an end-to-end server-process degradation test. The Go service's healthy response indicates only journal writability, not full Wardveil readiness, uptime, tenant enforcement, remote dependency health or any deployed service.
+
+**Current source pin (re-review before updating):** Wardveil commit 41ff4766719e87a3f5399359d0e721cce5df9493; HTTP handler Git blob e4d8d68a9a1ed5c2fb28c6fc9c6956c2027c548a. Any source upgrade requires manual inspection of imports, ownership, main entrypoint, storage code, module dependencies and behavior, a new explicit SHA, and review of the relevant authorization/privacy/security requirements. No workflow automatically follows future Wardveil main changes.
+
+The real Go service is a **development-only** loopback process. GitHub CI must pass before this evidence can be claimed. Production Identity/tenant scoping, GoreeShield retention/consent, Wardveil security policy, API compatibility ownership, deliberate port selection, actual remote TLS, secrets lifecycle, incident recovery and security review are *not* solved by this smoke.
