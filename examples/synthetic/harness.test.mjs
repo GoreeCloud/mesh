@@ -360,3 +360,72 @@ test('explicit undefined options retain safe default behavior', async () => {
   const defaultDeny = createSyntheticHarness({ manifest, meshPermit: undefined });
   assert.equal((await read(defaultDeny)).error.code, 'denied');
 });
+
+test('native admission never starts an excess Mesh permit or owner call', async () => {
+  let permitStarted;
+  let permitRelease;
+  const entered = new Promise(resolve => { permitStarted = resolve; });
+  const blocked = new Promise(resolve => { permitRelease = resolve; });
+  let permitCalls = 0;
+  let ownerCalls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 1000,
+    meshPermit: async () => {
+      permitCalls++;
+      if (permitCalls === 1) { permitStarted(); await blocked; }
+      return true;
+    },
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => { ownerCalls++; return status(); },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.deepEqual(await read(h), { ok: false, error: { code: 'unavailable' } });
+  assert.equal(permitCalls, 1, 'over-capacity reads must not even call Mesh policy');
+  assert.equal(ownerCalls, 0);
+  permitRelease();
+  assert.equal((await first).ok, true);
+  assert.equal((await read(h)).ok, true, 'completed reads release the slot');
+  assert.equal(ownerCalls, 2);
+});
+
+test('native admission releases capacity after a noncooperative timed-out owner read', async () => {
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 20,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => {
+        calls++;
+        if (calls === 1) entered();
+        return new Promise(() => {});
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'timed_out', 'slot is reusable even if adapter ignores cancellation');
+  assert.equal(calls, 2);
+});
+
+test('native admission rejects out-of-bounds limits while preserving explicit defaults', async () => {
+  for (const maxConcurrentReads of [0, -1, 1.5, 33, '8', Infinity]) {
+    assert.throws(() => harness({ maxConcurrentReads }), TypeError);
+  }
+  assert.equal((await read(harness({ maxConcurrentReads: undefined }))).ok, true);
+});
+
+test('native admission limit is descriptor-validated without invoking hostile getters', () => {
+  let invoked = 0;
+  const options = Object.defineProperty({ manifest }, 'maxConcurrentReads', {
+    get() { invoked++; throw Error('poisoned config'); },
+  });
+  assert.throws(() => createSyntheticHarness(options), TypeError);
+  assert.equal(invoked, 0);
+});
