@@ -153,12 +153,14 @@ async function main() {
       await sleep(120);
     }
     assert.equal(online, true, 'reviewed VPN source did not become healthy');
+    process.stdout.write('checkpoint=source_loopback_healthy\n');
     assert.equal((await loopback(port)).body, EXPECTED_WIRE);
     assert.equal((await loopback(port, '/api/v1/peers')).status, 401);
     assert.equal((await loopback(port, '/api/v1/status', 'wrong-token')).status, 401);
     assert.equal((await loopback(port, '/api/v1/status', token)).status, 200);
     assert.equal((await loopback(port, '/api/v1/status', token,
                                  'http://127.0.0.1')).status, 403);
+    process.stdout.write('checkpoint=source_auth_boundaries\n');
 
     ownerPermit = false;
     const count = transportCalls;
@@ -166,6 +168,7 @@ async function main() {
     assert.equal(transportCalls, count);
     ownerPermit = true;
     await stopVPN(child);
+    process.stdout.write('checkpoint=source_stopped\n');
     assert.equal((await read()).error.code, 'unavailable');
 
     child = startVPN(source, root, port, token);
