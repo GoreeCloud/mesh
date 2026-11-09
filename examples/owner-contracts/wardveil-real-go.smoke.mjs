@@ -68,6 +68,23 @@ async function stopWardveil(child) {
   }
 }
 
+// Disposable GitHub-hosted child only: verify the service can reopen its
+// synthetic private journal after an abrupt process termination. This does
+// not validate recovery of a partially written event or a production crash.
+async function killDisposableWardveil(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    throw new Error('disposable Wardveil child is not running');
+  }
+  const exit = new Promise(resolveDone => child.once('exit', (_code, signal) => resolveDone(signal)));
+  if (!child.kill('SIGKILL')) {
+    throw new Error('could not stop disposable Wardveil child');
+  }
+  const signal = await Promise.race([exit, sleep(2000).then(() => null)]);
+  if (signal !== 'SIGKILL') {
+    throw new Error('disposable Wardveil child did not exit after abrupt stop');
+  }
+}
+
 async function awaitHealthy(child, harness, read) {
   for (let attempt = 0; attempt < 60; attempt++) {
     if (child.exitCode !== null || child.signalCode !== null) {
@@ -235,7 +252,22 @@ async function main() {
     ]);
     observer.clear();
     assert.deepEqual(observer.records(), []);
-    console.log('PASS: genuine Wardveil Go /healthz + authenticated /v1/status, independent bearer scopes, rotation, denial, recovery and redacted evidence (isolated CI)');
+
+    // Exercise abrupt failure separately from the earlier graceful restart.
+    // There are no persisted synthetic events in this probe, so it proves
+    // journal reopening and fresh authorization, not torn-write durability.
+    await killDisposableWardveil(child);
+    child = null;
+    assert.equal((await scopedRead(scopedHarness(rotatedStatusToken))).error.code, 'unavailable');
+    child = startWardveil(expectedBinary, root, port, ingestToken, readToken, rotatedStatusToken);
+    await awaitHealthy(child, harness, read);
+    const afterAbruptRestart = await scopedRead(scopedHarness(rotatedStatusToken));
+    assert.equal(afterAbruptRestart.ok, true);
+    assert.equal(afterAbruptRestart.data.state, 'ok');
+    assert.equal(await directProtectedRouteStatus(port, '/v1/status', statusToken), 403);
+    assert.equal(await directProtectedRouteStatus(port, '/v1/events', rotatedStatusToken), 403);
+
+    console.log('PASS: actual Wardveil Go scoped status, token rotation, graceful and abrupt isolated restart, denial and bounded redacted outcomes');
   } finally {
     await stopWardveil(child);
     await rm(root, { recursive: true, force: true });
