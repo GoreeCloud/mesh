@@ -69,15 +69,17 @@ function snapshotStatus(value, maxResponseBytes) {
  */
 export function createSyntheticHarness({
   manifest, adapters = Object.create(null), meshPermit = () => false,
-  timeoutMs = 100, maxResponseBytes = 1024,
+  timeoutMs = 100, maxResponseBytes = 1024, maxConcurrentReads = 8,
 } = {}) {
   const inventory = validateManifest(manifest);
   if (!plain(adapters) || typeof meshPermit !== 'function' ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
-      !Number.isInteger(maxResponseBytes) || maxResponseBytes < 32 || maxResponseBytes > 4096) {
+      !Number.isInteger(maxResponseBytes) || maxResponseBytes < 32 || maxResponseBytes > 4096 ||
+      !Number.isInteger(maxConcurrentReads) || maxConcurrentReads < 1 || maxConcurrentReads > 32) {
     throw new TypeError('invalid synthetic harness options');
   }
   const byID = new Map(inventory.map(capability => [capability.id, capability]));
+  let inFlight = 0;
   return Object.freeze({
     discover() {
       // Return inert copies; capability presence conveys no permission or health.
@@ -109,58 +111,65 @@ export function createSyntheticHarness({
         return failure('unsupported');
       }
       if (typeof actor !== 'string' || !ID.test(actor)) return failure('denied');
-      const controller = new AbortController();
-      let timer;
-      const timeout = new Promise(resolve => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve({ kind: 'timeout' });
-        }, timeoutMs);
-      });
-      const action = (async () => {
-        // Fail closed for absent, false, throwing or rejected authorization.
-        try {
-          if (await meshPermit(actor, capability) !== true) return { kind: 'denied' };
-          // A delayed Mesh permit must not start owner work after timeout.
-          if (controller.signal.aborted) return { kind: 'denied' };
-        } catch {
-          return { kind: 'denied' };
-        }
-        const adapter = own(adapters, capability.id) ? adapters[capability.id] : null;
-        if (!plain(adapter) || typeof adapter.authorize !== 'function' ||
-            typeof adapter.readStatus !== 'function') return { kind: 'unavailable' };
-        try {
-          if (await adapter.authorize(actor, capability, { signal: controller.signal }) !== true) {
+      // Admit work before starting any authorization promise or owner work.
+      if (inFlight >= maxConcurrentReads) return failure('unavailable');
+      inFlight += 1;
+      try {
+        const controller = new AbortController();
+        let timer;
+        const timeout = new Promise(resolve => {
+          timer = setTimeout(() => {
+            controller.abort();
+            resolve({ kind: 'timeout' });
+          }, timeoutMs);
+        });
+        const action = (async () => {
+          // Fail closed for absent, false, throwing or rejected authorization.
+          try {
+            if (await meshPermit(actor, capability) !== true) return { kind: 'denied' };
+            // A delayed Mesh permit must not start owner work after timeout.
+            if (controller.signal.aborted) return { kind: 'denied' };
+          } catch {
             return { kind: 'denied' };
           }
-          // Owner authorization may settle after the response was timed out.
-          if (controller.signal.aborted) return { kind: 'denied' };
-        } catch {
-          return { kind: 'denied' };
-        }
+          const adapter = own(adapters, capability.id) ? adapters[capability.id] : null;
+          if (!plain(adapter) || typeof adapter.authorize !== 'function' ||
+              typeof adapter.readStatus !== 'function') return { kind: 'unavailable' };
+          try {
+            if (await adapter.authorize(actor, capability, { signal: controller.signal }) !== true) {
+              return { kind: 'denied' };
+            }
+            // Owner authorization may settle after the response was timed out.
+            if (controller.signal.aborted) return { kind: 'denied' };
+          } catch {
+            return { kind: 'denied' };
+          }
+          try {
+            return { kind: 'result', value: await adapter.readStatus({ signal: controller.signal }) };
+          } catch {
+            return { kind: 'unavailable' };
+          }
+        })();
         try {
-          return { kind: 'result', value: await adapter.readStatus({ signal: controller.signal }) };
-        } catch {
-          return { kind: 'unavailable' };
+          const outcome = await Promise.race([action, timeout]);
+          if (outcome.kind === 'timeout') return failure('timed_out');
+          if (outcome.kind === 'denied') return failure('denied');
+          if (outcome.kind !== 'result') return failure('unavailable');
+          const snapshot = snapshotStatus(outcome.value, maxResponseBytes);
+          if (!snapshot) return failure('invalid_response');
+          return {
+            ok: true,
+            kind: 'synthetic_result',
+            capabilityId: capability.id,
+            evidence_status: capability.evidence_status,
+            data: snapshot,
+          };
+        } finally {
+          clearTimeout(timer);
+          controller.abort();
         }
-      })();
-      try {
-        const outcome = await Promise.race([action, timeout]);
-        if (outcome.kind === 'timeout') return failure('timed_out');
-        if (outcome.kind === 'denied') return failure('denied');
-        if (outcome.kind !== 'result') return failure('unavailable');
-        const snapshot = snapshotStatus(outcome.value, maxResponseBytes);
-        if (!snapshot) return failure('invalid_response');
-        return {
-          ok: true,
-          kind: 'synthetic_result',
-          capabilityId: capability.id,
-          evidence_status: capability.evidence_status,
-          data: snapshot,
-        };
       } finally {
-        clearTimeout(timer);
-        controller.abort();
+        inFlight -= 1;
       }
     },
   });
