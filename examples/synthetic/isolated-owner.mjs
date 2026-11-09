@@ -49,8 +49,13 @@ export function createIsolatedSyntheticOwner(options) {
         return allowed && !signal?.aborted;
       } catch { return false; }
     },
+    activeCount() { return active; },
     async readStatus({ signal } = {}) {
-      if (!(signal instanceof AbortSignal) || signal.aborted || active >= maxConcurrent) {
+      try {
+        if (!(signal instanceof AbortSignal) || signal.aborted || active >= maxConcurrent) {
+          throw unavailable();
+        }
+      } catch {
         throw unavailable();
       }
       // One child = one read; admission is held until actual child CLOSE,
