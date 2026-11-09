@@ -205,3 +205,158 @@ test('owner data is captured once and returned as inert primitives', async () =>
   source.state = 'degraded';
   assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
 });
+
+test('untrusted adapter descriptors fail closed without calling registry getters or throwing', async () => {
+  let getterCalls = 0;
+  const registry = Object.defineProperty({}, capabilityId, {
+    enumerable: true,
+    get() { getterCalls++; throw Error('untrusted registration getter'); },
+  });
+  const fromGetter = await read(harness({ adapters: registry }));
+  assert.deepEqual(fromGetter, { ok: false, error: { code: 'unavailable' } });
+  assert.equal(getterCalls, 0, 'registration getter must never run');
+
+  const hostileRegistry = new Proxy({}, {
+    getOwnPropertyDescriptor() { throw Error('registry proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: hostileRegistry }))).error.code, 'unavailable');
+
+  const hostileAdapter = new Proxy({}, {
+    ownKeys() { throw Error('adapter proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: { [capabilityId]: hostileAdapter } }))).error.code, 'unavailable');
+});
+
+test('owner accessors and inherited functions cannot masquerade as approved adapter methods', async () => {
+  let getterCalls = 0;
+  const authorizeGetter = Object.defineProperty({ readStatus: async () => status() }, 'authorize', {
+    enumerable: true,
+    get() { getterCalls++; return () => true; },
+  });
+  const readGetter = Object.defineProperty({ authorize: () => true }, 'readStatus', {
+    enumerable: true,
+    get() { getterCalls++; return async () => status(); },
+  });
+  const inherited = Object.create({ authorize: () => true, readStatus: async () => status() });
+  for (const adapter of [authorizeGetter, readGetter, inherited]) {
+    const response = await read(harness({ adapters: { [capabilityId]: adapter } }));
+    assert.equal(response.error.code, 'unavailable');
+  }
+  assert.equal(getterCalls, 0, 'owner adapter getters must never run');
+});
+
+test('method snapshot preserves adapter receiver and cannot be swapped mid-authorization', async () => {
+  const adapter = {
+    allowed: true,
+    authorize() {
+      this.readStatus = () => { throw Error('method changed after authorization'); };
+      return this.allowed;
+    },
+    async readStatus() { return status(); },
+  };
+  const result = await read(harness({ adapters: { [capabilityId]: adapter } }));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+});
+
+test('manifest snapshots reject getters without executing them', () => {
+  let getterCalls = 0;
+  const parentGetter = Object.defineProperty({ ...manifest }, 'schema_version', {
+    enumerable: true,
+    get() { getterCalls++; return 'mesh.capabilities.v1'; },
+  });
+  const arrayGetter = [...manifest.capabilities];
+  Object.defineProperty(arrayGetter, '0', {
+    enumerable: true,
+    get() { getterCalls++; return manifest.capabilities[0]; },
+  });
+  const capGetter = Object.defineProperty({ ...manifest.capabilities[0] }, 'id', {
+    enumerable: true,
+    get() { getterCalls++; return capabilityId; },
+  });
+  for (const invalid of [
+    parentGetter,
+    { ...manifest, capabilities: arrayGetter },
+    { ...manifest, capabilities: [capGetter] },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+  assert.equal(getterCalls, 0, 'manifest getters must not execute');
+});
+
+test('proxy traps, undeclared array data and sparse manifests fail closed', () => {
+  const throwing = new Proxy({}, {
+    ownKeys() { throw Error('manifest proxy trap'); },
+  });
+  const throwingCapability = new Proxy({}, {
+    ownKeys() { throw Error('capability proxy trap'); },
+  });
+  const sparse = new Array(2);
+  sparse[0] = manifest.capabilities[0];
+  const extra = [...manifest.capabilities];
+  extra.hidden = 'unexpected';
+  const symbol = [...manifest.capabilities];
+  symbol[Symbol('hidden')] = true;
+  for (const invalid of [
+    throwing,
+    { ...manifest, capabilities: [throwingCapability] },
+    { ...manifest, capabilities: sparse },
+    { ...manifest, capabilities: extra },
+    { ...manifest, capabilities: symbol },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+});
+
+test('validated discovery cannot be changed through original manifest mutation', () => {
+  const mutable = {
+    ...manifest,
+    capabilities: manifest.capabilities.map(capability => ({ ...capability })),
+  };
+  const h = createSyntheticHarness({ manifest: mutable });
+  const before = h.discover();
+  mutable.capabilities[0].owner = 'fixture.changed';
+  mutable.capabilities[0].evidence_status = 'verified';
+  mutable.capabilities.splice(0, 1);
+  assert.deepEqual(h.discover(), before);
+  assert.equal(h.discover()[0].evidence_status, 'prototype');
+});
+
+test('harness options reject getters, symbols and proxy traps before evaluating them', () => {
+  let invoked = 0;
+  const options = {
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+  };
+  for (const field of ['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes']) {
+    const poisoned = Object.defineProperty({ ...options }, field, {
+      enumerable: true,
+      get() { invoked++; throw Error('untrusted configuration getter'); },
+    });
+    assert.throws(() => createSyntheticHarness(poisoned), TypeError);
+  }
+  assert.equal(invoked, 0, 'construction must not invoke outer-option getters');
+  const throwing = new Proxy({}, { ownKeys() { throw Error('options proxy trap'); } });
+  const symbol = { ...options, [Symbol('hidden')]: true };
+  const hidden = Object.defineProperty({ ...options }, 'secret', { value: 'unapproved' });
+  const inherited = Object.create({ manifest });
+  for (const invalid of [throwing, symbol, hidden, inherited, null, []]) {
+    assert.throws(() => createSyntheticHarness(invalid), TypeError);
+  }
+});
+
+test('explicit undefined options retain safe default behavior', async () => {
+  const h = createSyntheticHarness({
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+    timeoutMs: undefined,
+    maxResponseBytes: undefined,
+  });
+  const result = await read(h);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+  const defaultDeny = createSyntheticHarness({ manifest, meshPermit: undefined });
+  assert.equal((await read(defaultDeny)).error.code, 'denied');
+});
