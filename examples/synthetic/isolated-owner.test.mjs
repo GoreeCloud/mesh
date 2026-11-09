@@ -46,6 +46,9 @@ test('worker crash and oversized output cannot become synthetic success', async 
     const adapter = owner(mode);
     const value = await read(harness(adapter));
     assert.equal(value.error.code, 'unavailable');
+    // An oversized child's caller fails before OS process close; the lease
+    // deliberately persists until the actual child exit is observed.
+    for (let i = 0; i < 30 && adapter.activeCount(); i++) await delay(10);
     assert.equal(adapter.activeCount(), 0);
     assert.doesNotMatch(JSON.stringify(value), /secret|private|stack|token/);
   }
