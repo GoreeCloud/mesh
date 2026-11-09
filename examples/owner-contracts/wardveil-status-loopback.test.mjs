@@ -13,7 +13,12 @@ const body = (state, observed_at = stamp()) =>
   JSON.stringify({ schema_version: 'wardveil.status.v1', state, observed_at }) + '\n';
 
 async function withServer(handle, check) {
-  const server = createServer(handle);
+  const server = createServer((req, res) => {
+    // Match the exact security metadata the actual Wardveil Go handler emits.
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    handle(req, res);
+  });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
@@ -119,6 +124,9 @@ test('status transport is fail-closed for arbitrary endpoints, tokens and option
     { port: 8080, token: FAKE_TOKEN, host: 'example.com' },
     { port: 8080, token: FAKE_TOKEN, timeoutMs: 1500 },
     { port: 8080, token: 'a'.repeat(64) + '\r\nInjection: yes' },
+    { port: 8080, token: FAKE_TOKEN + '\n' },
+    { port: 8080, token: 'a'.repeat(1024) + '=' },
+    { port: 8080, token: 'a'.repeat(1023) + '==' },
     { port: 80, token: FAKE_TOKEN }, null, [],
   ]) assert.throws(() => createLoopbackWardveilStatusTransport(options), TypeError);
   const transport = createLoopbackWardveilStatusTransport({ port: 8080, token: FAKE_TOKEN });
@@ -160,4 +168,51 @@ test('aborted, timed-out and oversized response paths report static unavailable'
   }, async port => {
     assert.equal((await read(harnessFor(port))).error.code, 'unavailable');
   });
+});
+
+test('missing or cacheable Wardveil security headers never become a valid status', async () => {
+  const cases = [
+    res => res.removeHeader('Cache-Control'),
+    res => res.setHeader('Cache-Control', 'public, max-age=3600'),
+    res => res.removeHeader('X-Content-Type-Options'),
+    res => res.setHeader('X-Content-Type-Options', 'off'),
+  ];
+  for (const tamper of cases) {
+    await withServer((_req, res) => {
+      tamper(res);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(body('ok'));
+    }, async port => {
+      const result = await read(harnessFor(port));
+      assert.equal(result.error.code, 'unavailable');
+      assert.doesNotMatch(JSON.stringify(result), /Bearer|token|private/);
+    });
+  }
+});
+
+test('duplicated cache-control and nosniff headers are ambiguous and rejected', async () => {
+  for (const duplicate of [
+    ['Cache-Control', 'no-store'],
+    ['X-Content-Type-Options', 'nosniff'],
+  ]) {
+    await withServer((_req, res) => {
+      res.writeHead(200, [
+        ['Content-Type', 'application/json; charset=utf-8'],
+        ['Cache-Control', 'no-store'],
+        ['X-Content-Type-Options', 'nosniff'],
+        duplicate,
+      ]);
+      res.end(body('ok'));
+    }, async port => {
+      assert.equal((await read(harnessFor(port))).error.code, 'unavailable');
+    });
+  }
+});
+
+test('the validated maximum-length bearer is accepted without a network requirement', () => {
+  const transport = createLoopbackWardveilStatusTransport({
+    port: 8123,
+    token: 'a'.repeat(1023) + '=',
+  });
+  assert.equal(typeof transport, 'function');
 });
