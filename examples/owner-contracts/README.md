@@ -69,10 +69,10 @@ health responses:
 
 - Tasks: GET /healthz, HTTP 200, JSON status ok with mode loopback-development.
   Verified source: GoreeCloud/tasks server/api.py Git blob
-  c9766edfce6149ce9ba63eeba5bc49bee601b9bf.
+  c78b5c2945cce463367026942ee9d5a203c2fe47.
 - Memos: GET /api/v1/health, HTTP 200, JSON status ok with service
   goreecloud-memos. Verified source: GoreeCloud/memos server/app.py Git blob
-  86a711f87d2902ddcdeecda294e9fdb644894c36.
+  88b3e96631fac4cd78c5ab9e90981c0f696735e5.
 
 The new tasks-healthz.mjs, memos-health.mjs and exact-health-fixture.mjs
 provide **transport-injected synthetic-only** projections from these exact
@@ -90,3 +90,5 @@ Identity, GoreeShield, Wardveil or Mesh integration. A future real connector
 requires owner authorization, release approval, explicit network policy,
 TLS/service authentication where appropriate and privacy review. Source pins
 must be rechecked when the two owner services change.
+
+**Source refresh, November 9, 2026:** Tasks development `main` `a20229ae13753cda129fea9f1aac7111ea9a4150` and Memos development `main` `a5366645ffbedd0381e98b756a0f1d62b76688dc` were re-read after their HTTP-header hardening merges. Their two unauthenticated health handler paths and response objects are unchanged; the pins above now identify the newer verified source blobs. This does not upgrade these experimental fixtures to real authenticated service contracts.
