@@ -8,7 +8,7 @@
 
 ## Verified baseline
 
-`main` contains the platform vision and a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters, tests, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
+`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded, in-memory `mesh.synthetic-evidence.v1` outcome observer, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
 
 Related maturity varies: GoreeShield has Linux synthetic work in unmerged draft PRs; Wardveil has a development-only event service; GC UI has passing quality gates but incomplete consumer adoption. Their experimental surfaces are **not automatically stable Mesh dependencies**. Identity integration requires a separate trust decision.
 
@@ -68,9 +68,9 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 ## Ordered follow-up
 
-1. Review and validate the current synthetic manifest, negative-path tests, fixture CI, and any proposed descriptor hardening without binding them to a production service.
-2. Specify a versioned private correlation-ID and redacted operational-evidence contract, then test it without capturing synthetic payloads in logs.
-3. Validate one real owner contract in nonproduction **after** owner readiness gates pass.
+1. **Synthetic-only completed:** Descriptor hardening from PR #8 and the opt-in `mesh.synthetic-evidence.v1` observer from PR #11 are merged. The observer has bounded in-memory retention, local correlation IDs, a maximum in-flight limit and redacted outcome-only records; the fixture suite and GitHub CI exercise this local reference contract. These are not real owner authorization or telemetry evidence.
+2. Define and review the separate **real integration** correlation-ID, privacy classification, retention, trace propagation and audit-evidence contract with owning systems. Require source-observed outcomes and ensure optional consent and sensitive payloads never enter Mesh logs by default.
+3. Validate one real owner contract in nonproduction **after** Identity, GoreeShield, Wardveil and source-owner readiness gates pass, including denial, revocation, outage and recovery.
 4. Consider write orchestration only after scoped authorization, idempotency, approval, rollback and source-observed outcomes are tested.
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
