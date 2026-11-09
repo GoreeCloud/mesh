@@ -31,6 +31,12 @@ for (const item of products) {
   test(item.name + ' contract pins the source and its read-only route', () => {
     assert.equal(item.contract.source, 'GoreeCloud/' + item.owner);
     assert.match(item.contract.source_blob, /^[a-f0-9]{40}$/);
+    const inspected = {
+      tasks: 'c78b5c2945cce463367026942ee9d5a203c2fe47',
+      memos: '88b3e96631fac4cd78c5ab9e90981c0f696735e5',
+    };
+    assert.equal(item.contract.source_blob, inspected[item.owner],
+                 'Update source pin only after reviewing its actual owner health route');
     assert.equal(item.contract.method, 'GET');
     assert.equal(item.contract.mode, 'transport-injected-nonproduction');
   });
