@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createSyntheticHarness } from '../synthetic/harness.mjs';
+import { createSyntheticReadObserver, EVIDENCE_VERSION } from '../synthetic/evidence.mjs';
 import { manifest } from '../synthetic/fixtures.mjs';
 import { createWardveilHealthFixtureAdapter } from './wardveil-healthz.mjs';
 import { createLoopbackWardveilHealthTransport } from './wardveil-loopback.mjs';
@@ -127,6 +128,10 @@ async function main() {
     timeoutMs: 800,
   });
   const read = h => h.read({ actor: 'synthetic-ci-reader', capabilityId });
+  // Opt-in outcome-only diagnostics; no log sink, actor IDs, tokens or payload.
+  const observer = createSyntheticReadObserver(harness, { capacity: 2, maxInFlight: 2 });
+  const observedRead = () => observer.read({ actor: 'synthetic-ci-reader', capabilityId });
+  const outcomeList = () => observer.records().map(event => event.outcome);
   let child;
 
   try {
@@ -146,6 +151,11 @@ async function main() {
 
     child = startWardveil(expectedBinary, root, port, ingestToken, readToken);
     await awaitHealthy(child, harness, read);
+    const firstEvidence = await observedRead();
+    assert.equal(firstEvidence.response.ok, true);
+    assert.match(firstEvidence.correlation_id, /^[a-f0-9-]{36}$/);
+    assert.equal(observer.records()[0].schema_version, EVIDENCE_VERSION);
+    assert.deepEqual(outcomeList(), ['ok']);
 
     assert.equal(await unauthenticatedEventRouteStatus(port), 401);
 
@@ -154,18 +164,38 @@ async function main() {
     const beforeRevocation = transportCalls;
     assert.equal((await read(harness)).error.code, 'denied');
     assert.equal(transportCalls, beforeRevocation);
+    const revokedEvidence = await observedRead();
+    assert.equal(revokedEvidence.response.error.code, 'denied');
+    assert.equal(transportCalls, beforeRevocation);
+    assert.deepEqual(outcomeList(), ['ok', 'denied']);
     ownerAllowed = true;
     assert.equal((await read(harness)).data.state, 'ok');
 
     await stopWardveil(child);
     child = null;
     assert.equal((await read(harness)).error.code, 'unavailable');
+    const downEvidence = await observedRead();
+    assert.equal(downEvidence.response.error.code, 'unavailable');
+    assert.deepEqual(outcomeList(), ['denied', 'unavailable']);
 
     // The exact reviewed Go service must reopen its private journal and recover
     // after a graceful stop; this is not a destructive crash recovery test.
     child = startWardveil(expectedBinary, root, port, ingestToken, readToken);
     await awaitHealthy(child, harness, read);
-    console.log('PASS: reviewed Wardveil Go service /healthz + Mesh default deny, revocation, outage and restart (isolated CI loopback)');
+    const recoveredEvidence = await observedRead();
+    assert.equal(recoveredEvidence.response.ok, true);
+    assert.deepEqual(outcomeList(), ['unavailable', 'ok']);
+    const redacted = JSON.stringify(observer.records());
+    assert.equal(redacted.includes(ingestToken), false);
+    assert.equal(redacted.includes(readToken), false);
+    assert.equal(redacted.includes('synthetic-ci-reader'), false);
+    assert.equal(redacted.includes('journal'), false);
+    assert.deepEqual(Object.keys(observer.records()[0]).sort(), [
+      'correlation_id', 'observed_at', 'outcome', 'schema_version',
+    ]);
+    observer.clear();
+    assert.deepEqual(observer.records(), []);
+    console.log('PASS: real Wardveil Go /healthz, Mesh denial/recovery and bounded redacted outcome evidence (isolated CI loopback)');
   } finally {
     await stopWardveil(child);
     await rm(root, { recursive: true, force: true });
