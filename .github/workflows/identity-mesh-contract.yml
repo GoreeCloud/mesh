@@ -1,0 +1,50 @@
+name: Pinned Identity-to-Mesh authorization contract (isolated)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  identity-mesh-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Mesh with no persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # official v4
+        with:
+          persist-credentials: false
+      - name: Checkout immutable, inspected GoreeCloud Identity source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: GoreeCloud/identity
+          ref: 703cb1b55f29e849d90f3281bb582cf33ee78804
+          path: identity-source
+          persist-credentials: false
+      - name: Setup Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # official v6
+        with:
+          python-version: '3.12'
+      - name: Setup Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # official v4
+        with:
+          node-version: '24'
+      - name: Verify pinned Identity source and dependency declaration
+        working-directory: identity-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '703cb1b55f29e849d90f3281bb582cf33ee78804'
+          test "$(git hash-object src/goreecloud_identity/resource_server.py)" = 'e32c3882c9a72d71e700998cb7b6339976f815fb'
+          test "$(git hash-object src/goreecloud_identity/policy.py)" = 'ff624a681b41917c440c95673a23ef48930fa0c1'
+          test "$(git hash-object src/goreecloud_identity/tokens.py)" = '054edbb0facd10f559da9038ec8bc8a4f7eac21d'
+          test "$(git hash-object requirements-auth.txt)" = 'a417daaa68f7850f9e7dfcbaa0278ec6d8930bc2'
+          grep -Fx 'PyJWT[crypto]==2.15.1' requirements-auth.txt
+      - name: Install Identity's declared, source-reviewed dev verifier dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -r identity-source/requirements-auth.txt
+      - name: Exercise exact Identity verifier via private Python IPC and Mesh Node harness
+        shell: bash
+        run: node --test examples/identity-contracts/identity-verified-reader.test.mjs
