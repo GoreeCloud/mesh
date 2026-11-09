@@ -7,7 +7,7 @@
 | Document type | Product vision and platform capabilities specification |
 | Product | GoreeCloud Mesh |
 | Responsible authority | GoreeCloud founder |
-| Status | Founder-directed platform vision; tested local contract fixtures only; no deployed integration fabric |
+| Status | Founder-directed platform vision; isolated source-authenticated development status tests; no deployed integration fabric |
 | Prepared | October 25, 2026 |
 | Version | Not assigned |
 | Canonical repository | [`GoreeCloud/mesh`](https://github.com/GoreeCloud/mesh) |
@@ -18,7 +18,7 @@
 
 **Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises strictly local, read-only discovery, fail-closed authorization, bounded concurrency and opt-in redacted diagnostic evidence. It does not itself connect to any product.
 
-**Source-specific development verification:** [Wardveil health contract, isolated loopback transport, and genuine Go runtime acceptance](examples/owner-contracts/README.md) exercise a reviewed `GET /healthz` response against both a disposable Node test server and the **actual SHA-pinned Wardveil Go development executable in hosted CI**. The real-Go check covers service startup, default-deny local Mesh/owner callbacks, revocation, outage/restart, unauthenticated sensitive-route refusal and privacy-minimized in-memory outcomes. It is **not** a deployed connector, a remote Wardveil health report, real Identity enforcement, an authenticated stable owner API or a production authorization. [Mesh stability and release gates](docs/stability-gates.md) remain open.
+**Source-owned development integration:** [Wardveil isolated health and scoped status v1 contracts](examples/owner-contracts/README.md) are exercised against the **actual SHA-pinned Wardveil Go development executable** in isolated hosted CI. Wardveil PR #26 added an opt-in third status-only bearer and source-observed status timestamp; Mesh PR #26 verifies the dedicated `/v1/status` contract, strict projection and header/body limits, denial of unauthorized event access, token rotation across controlled restart, outage/recovery, and in-memory private outcome diagnostics. Existing `/healthz` tests remain as a non-regression control. These are **not** a deployed service or a production connector: there is still no GoreeCloud Identity-based actor/tenant authorization, network TLS and process identity assurance, production secret lifecycle, privacy-policy acceptance or signed Stable release. [Mesh stability gates](docs/stability-gates.md) remain open.
 
 ## 1. Overview
 
