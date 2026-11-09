@@ -97,7 +97,9 @@ export function createIsolatedSyntheticOwner(options) {
             if (size > 256) { kill(); return; }
             if (!finished) output += chunk.toString('utf8');
           });
-          child.once('error', () => { kill(); release(); });
+          // A spawn/child error is not itself proof that OS resources closed.
+          // Node emits close after error when stdio has actually shut down.
+          child.once('error', kill);
           child.once('close', (exitCode, signalCode) => {
             release();
             if (finished) return;
