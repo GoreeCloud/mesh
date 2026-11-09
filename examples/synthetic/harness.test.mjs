@@ -406,9 +406,11 @@ test('native admission never starts an excess Mesh permit or owner call', async 
   assert.equal(ownerCalls, 2);
 });
 
-test('native admission releases capacity after a noncooperative timed-out owner read', async () => {
+test('timed-out noncooperative owner stays charged until it actually settles', async () => {
   let entered;
+  let settle;
   const started = new Promise(resolve => { entered = resolve; });
+  const delayedOwner = new Promise(resolve => { settle = resolve; });
   let calls = 0;
   const h = harness({
     maxConcurrentReads: 1,
@@ -416,16 +418,82 @@ test('native admission releases capacity after a noncooperative timed-out owner 
     adapters: { [capabilityId]: fixtureAdapter({
       readStatus: () => {
         calls++;
-        if (calls === 1) entered();
-        return new Promise(() => {});
+        if (calls === 1) {
+          entered();
+          return delayedOwner; // deliberately ignores abort
+        }
+        return status();
       },
     }) },
   });
   const first = read(h);
   await started;
-  assert.equal((await read(h)).error.code, 'unavailable');
   assert.equal((await first).error.code, 'timed_out');
-  assert.equal((await read(h)).error.code, 'timed_out', 'slot is reusable even if adapter ignores cancellation');
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await read(h)).error.code, 'unavailable');
+  }
+  assert.equal(calls, 1, 'timeout must not admit duplicate owner work');
+  settle(status());
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true, 'settled owner releases its slot');
+  assert.equal(calls, 2);
+});
+
+test('pending authorization remains charged after timeout until policy returns', async () => {
+  let begun;
+  let resolvePolicy;
+  const entered = new Promise(resolve => { begun = resolve; });
+  const held = new Promise(resolve => { resolvePolicy = resolve; });
+  let permits = 0;
+  let ownerCalls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 15,
+    meshPermit: async () => {
+      permits++;
+      if (permits === 1) { begun(); await held; }
+      return true;
+    },
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => { ownerCalls++; return status(); },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal(permits, 1);
+  resolvePolicy();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ownerCalls, 0, 'late policy must not trigger aborted owner work');
+  assert.equal((await read(h)).ok, true);
+  assert.equal(ownerCalls, 1);
+});
+
+test('late rejected noncooperative owner read is consumed and frees the slot', async () => {
+  let begun;
+  let rejectRead;
+  const entered = new Promise(resolve => { begun = resolve; });
+  const held = new Promise((_resolve, reject) => { rejectRead = reject; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 15,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => {
+        calls++;
+        if (calls === 1) { begun(); return held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  rejectRead(new Error('private late owner failure'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true, 'late rejection releases capacity safely');
   assert.equal(calls, 2);
 });
 
