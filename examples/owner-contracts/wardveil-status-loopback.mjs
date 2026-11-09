@@ -53,7 +53,7 @@ export function createLoopbackWardveilStatusTransport(options) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        reject(new Error('loopback health unavailable'));
+        reject(new Error('scoped status transport unavailable'));
       };
       const succeed = response => {
         if (settled) return;
