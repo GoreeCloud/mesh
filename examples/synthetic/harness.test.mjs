@@ -205,3 +205,52 @@ test('owner data is captured once and returned as inert primitives', async () =>
   source.state = 'degraded';
   assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
 });
+
+test('parallel synthetic reads are admission-limited before owner work', async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const blocked = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 1000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => {
+        calls += 1;
+        if (calls === 1) { entered(); return blocked; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.deepEqual(await read(h), { ok: false, error: { code: 'unavailable' } });
+  assert.equal(calls, 1, 'over-capacity requests must not reach the owner');
+  release(status());
+  assert.equal((await first).ok, true);
+  assert.equal((await read(h)).ok, true, 'finished reads must release admission slots');
+  assert.equal(calls, 2);
+});
+
+test('timed-out synthetic reads release capacity even if an adapter hangs', async () => {
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 20,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => { entered(); return new Promise(() => {}); },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'timed_out', 'slot must be reusable');
+});
+
+test('synthetic admission bounds reject invalid or excessive limits', () => {
+  for (const maxConcurrentReads of [0, -1, 1.5, 33, '8', Infinity]) {
+    assert.throws(() => harness({ maxConcurrentReads }), TypeError);
+  }
+});
