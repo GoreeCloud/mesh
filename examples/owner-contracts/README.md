@@ -61,3 +61,32 @@ Separately, the source-owned Wardveil Go handler test named TestUncertainJournal
 The real Go service is a **development-only** loopback process. GitHub CI must pass before this evidence can be claimed. Production Identity/tenant scoping, GoreeShield retention/consent, Wardveil security policy, API compatibility ownership, deliberate port selection, actual remote TLS, secrets lifecycle, incident recovery and security review are *not* solved by this smoke.
 
 The same pinned Go runtime smoke also wraps the live-response Mesh harness in its **optional in-memory diagnostic observer**. It checks locally generated correlation IDs, fixed diagnostic schema, exact classified outcomes on success/denial/outage/recovery, a two-record retention ring, explicit erasure, and the absence of test identity, tokens or journal paths in evidence records. This is an ephemeral CI regression, not an exported audit trail, production log or privacy certification.
+
+## Additional Tasks and Memos health contracts (November 9, 2026)
+
+Two source-verified, strictly local-development APIs have distinct unauthenticated
+health responses:
+
+- Tasks: GET /healthz, HTTP 200, JSON status ok with mode loopback-development.
+  Verified source: GoreeCloud/tasks server/api.py Git blob
+  c9766edfce6149ce9ba63eeba5bc49bee601b9bf.
+- Memos: GET /api/v1/health, HTTP 200, JSON status ok with service
+  goreecloud-memos. Verified source: GoreeCloud/memos server/app.py Git blob
+  86a711f87d2902ddcdeecda294e9fdb644894c36.
+
+The new tasks-healthz.mjs, memos-health.mjs and exact-health-fixture.mjs
+provide **transport-injected synthetic-only** projections from these exact
+source-shaped responses to a small status and caller-observed timestamp.
+The separate Mesh permit and local owner permit must both allow a read in the
+synthetic harness. The default owner permit denies; source bodies are never
+returned. Invalid or oversized results, extra/duplicate JSON fields,
+dangerous property getters, aborts and invalid clock values fail closed.
+
+No transport implementation, listener, URL selector, credential, task/memo
+content retrieval, synchronization or deployment is created by these modules.
+The tests exercise synthetic transport callbacks only. A passing health
+contract is neither proof of a live healthy product nor of a production-safe
+Identity, GoreeShield, Wardveil or Mesh integration. A future real connector
+requires owner authorization, release approval, explicit network policy,
+TLS/service authentication where appropriate and privacy review. Source pins
+must be rechecked when the two owner services change.
