@@ -67,7 +67,10 @@ for (const item of plans) {
       },
     }).read(request(item));
     assert.equal(calls, 1);
-    assert.deepEqual(result, { ok: true, data: { state: 'ok', observed_at: seenAt } });
+    assert.deepEqual(result, {
+      ok: true, kind: 'synthetic_result', capabilityId: item.capability,
+      evidence_status: 'prototype', data: { state: 'ok', observed_at: seenAt },
+    });
     assert.equal(JSON.stringify(result).includes(item.body), false);
     assert.equal('data_plane_enforced' in result.data, false);
     assert.equal('routes' in result.data, false);
