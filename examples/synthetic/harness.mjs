@@ -11,21 +11,59 @@ function plain(value) {
     (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 }
 
-function exactKeys(value, keys) {
-  return plain(value) && Object.keys(value).length === keys.length && keys.every(key => own(value, key));
+// Manifest objects are untrusted. Snapshot only own data descriptors: do not
+// invoke a getter or copy a field whose value can change during validation.
+function snapshotFields(value, expected) {
+  try {
+    if (!plain(value)) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== expected.length || !expected.every(key => keys.includes(key))) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const data = Object.create(null);
+    for (const key of expected) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !own(descriptor, 'value')) return null;
+      data[key] = descriptor.value;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotEntries(value) {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const size = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+    if (!Number.isInteger(size) || size < 1 || size > 32) return null;
+    // Reject sparse arrays, accessor elements, symbols, and undeclared properties.
+    if (Reflect.ownKeys(value).length !== size + 1) return null;
+    const entries = [];
+    for (let i = 0; i < size; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor || !own(descriptor, 'value')) return null;
+      entries.push(descriptor.value);
+    }
+    return entries;
+  } catch {
+    return null;
+  }
 }
 
 export function validateManifest(manifest) {
-  if (!exactKeys(manifest, ['schema_version', 'environment', 'capabilities']) ||
-      manifest.schema_version !== CONTRACT_VERSION ||
-      manifest.environment !== 'synthetic-local-only' ||
-      !Array.isArray(manifest.capabilities) || manifest.capabilities.length < 1 ||
-      manifest.capabilities.length > 32) {
+  const fields = snapshotFields(manifest, ['schema_version', 'environment', 'capabilities']);
+  const entries = fields && snapshotEntries(fields.capabilities);
+  if (!fields || fields.schema_version !== CONTRACT_VERSION ||
+      fields.environment !== 'synthetic-local-only' || !entries) {
     throw new TypeError('invalid synthetic capability manifest');
   }
   const ids = new Set();
-  return manifest.capabilities.map(capability => {
-    if (!exactKeys(capability, ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status']) ||
+  const inventory = [];
+  for (const candidate of entries) {
+    const capability = snapshotFields(candidate, [
+      'id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status',
+    ]);
+    if (!capability ||
         typeof capability.id !== 'string' || !ID.test(capability.id) ||
         typeof capability.owner !== 'string' || !ID.test(capability.owner) ||
         capability.version !== '0.0.1-fixture' || capability.operation !== 'status.read' ||
@@ -34,8 +72,9 @@ export function validateManifest(manifest) {
       throw new TypeError('invalid or duplicate synthetic capability');
     }
     ids.add(capability.id);
-    return Object.freeze({ ...capability });
-  });
+    inventory.push(Object.freeze(capability));
+  }
+  return inventory;
 }
 
 function failure(code) {
@@ -67,10 +106,38 @@ function snapshotStatus(value, maxResponseBytes) {
  * All adapters are in-process fixtures. Discovery does not authorize execution.
  * Both meshPermit and the owner adapter must explicitly approve each read.
  */
-export function createSyntheticHarness({
-  manifest, adapters = Object.create(null), meshPermit = () => false,
-  timeoutMs = 100, maxResponseBytes = 1024, maxConcurrentReads = 8,
-} = {}) {
+// The enclosing configuration is also an untrusted boundary: parameter
+// destructuring itself would invoke malicious getters before validation.
+function snapshotOptions(value) {
+  try {
+    if (!plain(value)) return null;
+    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes', 'maxConcurrentReads']);
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => !allowed.has(key))) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const options = {
+      manifest: undefined,
+      adapters: Object.create(null),
+      meshPermit: () => false,
+      timeoutMs: 100,
+      maxResponseBytes: 1024,
+      maxConcurrentReads: 8,
+    };
+    for (const key of keys) {
+      if (!own(descriptors[key], 'value')) return null;
+      // Match default-parameter behavior for explicitly undefined options.
+      if (descriptors[key].value !== undefined) options[key] = descriptors[key].value;
+    }
+    return options;
+  } catch {
+    return null;
+  }
+}
+
+export function createSyntheticHarness(options = {}) {
+  const config = snapshotOptions(options);
+  if (!config) throw new TypeError('invalid synthetic harness options');
+  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads } = config;
   const inventory = validateManifest(manifest);
   if (!plain(adapters) || typeof meshPermit !== 'function' ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
@@ -111,7 +178,7 @@ export function createSyntheticHarness({
         return failure('unsupported');
       }
       if (typeof actor !== 'string' || !ID.test(actor)) return failure('denied');
-      // Admit work before starting any authorization promise or owner work.
+      // Cap simultaneous requests before Mesh/owner authorization or adapter resolution.
       if (inFlight >= maxConcurrentReads) return failure('unavailable');
       inFlight += 1;
       try {
@@ -132,11 +199,30 @@ export function createSyntheticHarness({
           } catch {
             return { kind: 'denied' };
           }
-          const adapter = own(adapters, capability.id) ? adapters[capability.id] : null;
-          if (!plain(adapter) || typeof adapter.authorize !== 'function' ||
-              typeof adapter.readStatus !== 'function') return { kind: 'unavailable' };
+          // An adapter registry is untrusted. A getter (or proxy trap) must never
+          // execute just because Mesh discovered a capability or selected an owner.
+          // Snapshot methods from own data descriptors once, then call only those.
+          let adapter, authorize, readStatus;
           try {
-            if (await adapter.authorize(actor, capability, { signal: controller.signal }) !== true) {
+            const registered = Object.getOwnPropertyDescriptor(adapters, capability.id);
+            if (!registered || !own(registered, 'value') || !plain(registered.value)) {
+              return { kind: 'unavailable' };
+            }
+            adapter = registered.value;
+            const methods = Object.getOwnPropertyDescriptors(adapter);
+            if (!own(methods, 'authorize') || !own(methods, 'readStatus') ||
+                !own(methods.authorize, 'value') || !own(methods.readStatus, 'value') ||
+                typeof methods.authorize.value !== 'function' ||
+                typeof methods.readStatus.value !== 'function') {
+              return { kind: 'unavailable' };
+            }
+            authorize = methods.authorize.value;
+            readStatus = methods.readStatus.value;
+          } catch {
+            return { kind: 'unavailable' };
+          }
+          try {
+            if (await Reflect.apply(authorize, adapter, [actor, capability, { signal: controller.signal }]) !== true) {
               return { kind: 'denied' };
             }
             // Owner authorization may settle after the response was timed out.
@@ -145,7 +231,7 @@ export function createSyntheticHarness({
             return { kind: 'denied' };
           }
           try {
-            return { kind: 'result', value: await adapter.readStatus({ signal: controller.signal }) };
+            return { kind: 'result', value: await Reflect.apply(readStatus, adapter, [{ signal: controller.signal }]) };
           } catch {
             return { kind: 'unavailable' };
           }
@@ -169,6 +255,7 @@ export function createSyntheticHarness({
           controller.abort();
         }
       } finally {
+        // Cooperative abort is best-effort; a noncooperative fixture cannot hold a slot forever.
         inFlight -= 1;
       }
     },

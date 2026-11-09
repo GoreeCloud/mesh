@@ -3,18 +3,18 @@
 | Field | Value |
 | --- | --- |
 | Status | Proposed engineering acceptance gates, not an implementation claim |
-| Checked | 2026-11-06 (targeted privacy/security boundary review) |
+| Checked | 2026-11-07 (targeted source and synthetic boundary review) |
 | Scope | Mesh interactions with GoreeCloud Identity, GoreeShield, Wardveil, and GoreeCloud UI |
 
 ## Verified baseline
 
-`main` contains a platform vision, not a running integration fabric. There is no Mesh runtime, API, connector, or CI implementation in this repository as of this checkpoint. No downstream system should mark a Mesh integration delivered based on this document.
+`main` contains the platform vision, a dependency-free, nonproduction synthetic Node.js discovery/status harness with two fictional adapters and tests, an opt-in bounded, in-memory `mesh.synthetic-evidence.v1` outcome observer, and a GitHub Actions fixture workflow. There is no deployed Mesh integration fabric, production API, real connector, or authorized cross-system exchange. No downstream system should mark a Mesh integration delivered based on this document.
 
 Related maturity varies: GoreeShield has Linux synthetic work in unmerged draft PRs; Wardveil has a development-only event service; GC UI has passing quality gates but incomplete consumer adoption. Their experimental surfaces are **not automatically stable Mesh dependencies**. Identity integration requires a separate trust decision.
 
-## First implementation slice (proposed)
+## First implementation slice (reference fixture; not production)
 
-Build one opt-in, **local, read-only** discovery path using two synthetic first-party adapters and a versioned capability manifest. It must require no production accounts, secrets, third-party connections, public listener, or cross-system mutation. A demonstration does not establish a live product integration.
+The existing reference fixture provides a **local, read-only** discovery path using two fictional adapters and a versioned capability manifest. It uses no production accounts, secrets, third-party connections, public listener, or cross-system mutation. A demonstration does not establish a live product integration. Untrusted registration accessors and method descriptors require explicit negative regression coverage before promoting even this fixture.
 
 Acceptance tests for the first slice must cover:
 
@@ -68,9 +68,9 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 ## Ordered follow-up
 
-1. Approve the discovery manifest and synthetic fixtures, without binding to a production service.
-2. Implement the minimal denied/unavailable-state test harness.
-3. Validate one real owner contract in nonproduction **after** owner readiness gates pass.
+1. **Synthetic-only completed:** Descriptor hardening from PR #8 and the opt-in `mesh.synthetic-evidence.v1` observer from PR #11 are merged. The observer has bounded in-memory retention, local correlation IDs, a maximum in-flight limit and redacted outcome-only records; the fixture suite and GitHub CI exercise this local reference contract. These are not real owner authorization or telemetry evidence.
+2. Define and review the separate **real integration** correlation-ID, privacy classification, retention, trace propagation and audit-evidence contract with owning systems. Require source-observed outcomes and ensure optional consent and sensitive payloads never enter Mesh logs by default.
+3. Validate one real owner contract in nonproduction **after** Identity, GoreeShield, Wardveil and source-owner readiness gates pass, including denial, revocation, outage and recovery.
 4. Consider write orchestration only after scoped authorization, idempotency, approval, rollback and source-observed outcomes are tested.
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.

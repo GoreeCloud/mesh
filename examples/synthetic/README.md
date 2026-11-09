@@ -6,10 +6,35 @@ Run `npm test` for contract tests or `npm run demo` for an inert example. The de
 
 Contract rules:
 
-- `mesh.capabilities.v1` declares only `synthetic-local-only` records with a bounded, unique capability ID and `status.read` operation. A discovered record stays `prototype` and carries **zero implicit authority**.
-- Mesh policy and the simulated owning adapter must each approve an actor. All absent/throwing/false decisions are denied. No write operation is supported.
+- `mesh.capabilities.v1` declares only `synthetic-local-only` records with a bounded, unique capability ID and `status.read` operation. Manifest and capability fields are snapshotted from exact own data descriptors; hostile getters, sparse/accessor array entries, symbols, undeclared properties and throwing proxy traps are rejected without executing getter bodies. A discovered record stays `prototype` and carries **zero implicit authority**.
+- Mesh policy and the simulated owning adapter must each approve an actor. All absent/throwing/false decisions are denied. The *outer* constructor options are also snapshotted from own data descriptors before access: getters, inherited/hidden fields and throwing proxies cannot execute at initialization. Adapter registration and method lookup require plain own data descriptors; getters, inherited methods and throwing proxy traps cannot trigger owner work. No write operation is supported.
 - Outcomes are typed `unsupported`, `denied`, `unavailable`, `timed_out`, or `invalid_response`. Reads have a maximum one-second configurable execution budget and a 4 KiB maximum output ceiling; fixture defaults are 100 ms and 1 KiB.
 - Accepted result data is limited to a strictly shaped synthetic status, never arbitrary logs or user payload. No central request/payload logging exists.
 - The timeout abort signal can stop cooperative fixture reads. An uncooperative promise may continue in memory after its caller times out; this is **not** a production isolation boundary. Production adapters require process/network-level cancellation and protection against side effects.
 
 No part of this harness should be promoted as an operational Mesh integration until independently reviewed owner-side contracts, authorization, resilience and deployment evidence satisfy the release gates.
+
+
+## Opt-in correlation evidence and concurrency admission
+
+`evidence.mjs` adds a **nonproduction**, in-memory wrapper for the same synthetic `read()` interface. It never opens a socket, exports telemetry, performs a retry, changes the owner's response, grants a permission, or writes durable state. Opting into the wrapper creates a bounded ring of `mesh.synthetic-evidence.v1` terminal records containing **only** `schema_version`, a random local `correlation_id`, the enumerated `outcome`, and `observed_at`. No actor, request, capability name, response data, error text, credential, or raw payload is retained.
+
+```js
+import { createFixtureHarness } from './fixtures.mjs';
+import { createSyntheticReadObserver } from './evidence.mjs';
+
+const observer = createSyntheticReadObserver(createFixtureHarness(), {
+  capacity: 32, maxInFlight: 8,
+});
+const { correlation_id, response } = await observer.read({
+  actor: 'fixture.reader',
+  capabilityId: 'fixture.alpha.status',
+  operation: 'status.read',
+});
+const privateEvidence = observer.records();
+observer.clear(); // explicit in-memory retention control
+```
+
+The wrapper records completion order, not invocation order. It refuses an excess concurrent read **before** calling the owner, returning the existing typed `unavailable` outcome. Calls already running are governed by the underlying synthetic harness's timeout and cancellation limits; the observer cannot stop an owner that ignores cancellation. It passes through the original result object or thrown exception, without writing either into evidence. Invalid configuration/accessors/proxies are rejected before invoking untrusted getters. Correlation IDs are local diagnostics, not signed attestations, durable audit IDs, service health proofs, authorization tokens or permission to share evidence externally.
+
+Validation: `npm test` includes `evidence.test.mjs` alongside the existing synthetic contract tests. Live Identity, GoreeShield, Wardveil, production telemetry, durable delivery and real adapters remain unimplemented.
