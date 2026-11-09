@@ -39,7 +39,7 @@ jobs:
           GOTOOLCHAIN: 'local'
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = '41ff4766719e87a3f5399359d0e721cce5df9493'
+          test "$(git rev-parse HEAD)" = 'a79624bbe0846ca37192fc3dd9386901a9e57088'
           test "$(git hash-object internal/httpapi/server.go)" = '1a4242df290422f0e4ecaa151e0fb694ff195151'
           test "$(git hash-object cmd/wardveil/main.go)" = 'd8d249f8fcc64322957dd4d3fc12c30f9ebe0854'
           test "$(git hash-object internal/store/store.go)" = '0d2a92b8c3d4aadf774e03bedcfa61a3a3d26e6d'
