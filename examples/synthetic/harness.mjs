@@ -139,7 +139,15 @@ export function createSyntheticHarness(options = {}) {
   if (!config) throw new TypeError('invalid synthetic harness options');
   const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads } = config;
   const inventory = validateManifest(manifest);
-  if (!plain(adapters) || typeof meshPermit !== 'function' ||
+  // The registry itself can be an untrusted Proxy. Its getPrototypeOf trap
+  // must not leak arbitrary source errors outside the constructor contract.
+  let registryIsPlain = false;
+  try {
+    registryIsPlain = plain(adapters);
+  } catch {
+    // Fail closed with the same generic TypeError as all other bad options.
+  }
+  if (!registryIsPlain || typeof meshPermit !== 'function' ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
       !Number.isInteger(maxResponseBytes) || maxResponseBytes < 32 || maxResponseBytes > 4096 ||
       !Number.isInteger(maxConcurrentReads) || maxConcurrentReads < 1 || maxConcurrentReads > 32) {
