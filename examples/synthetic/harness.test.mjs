@@ -206,6 +206,21 @@ test('owner data is captured once and returned as inert primitives', async () =>
   assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
 });
 
+test('hostile adapter registry prototype traps yield a generic construction error', () => {
+  let trapCalls = 0;
+  const hostile = new Proxy({}, {
+    getPrototypeOf() {
+      trapCalls++;
+      throw new Error('sensitive owner registry detail');
+    },
+  });
+  assert.throws(
+    () => harness({ adapters: hostile }),
+    error => error instanceof TypeError && error.message === 'invalid synthetic harness options',
+  );
+  assert.equal(trapCalls, 1, 'validation may inspect the registry but never authorize an owner');
+});
+
 test('untrusted adapter descriptors fail closed without calling registry getters or throwing', async () => {
   let getterCalls = 0;
   const registry = Object.defineProperty({}, capabilityId, {
