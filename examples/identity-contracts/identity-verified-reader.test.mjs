@@ -176,7 +176,7 @@ test('pending verifier retains capacity after timeout and cannot authorize late'
   const held = new Promise(resolve => { release = resolve; });
   const reader = createIdentityVerifiedFixtureReader({
     harness: syntheticHarness(),
-    verifyBearer: async () => { calls++; return held; },
+    verifyBearer: async () => { calls++; return calls === 1 ? held : false; },
     timeoutMs: 20, maxConcurrent: 1,
   });
   assert.equal((await reader.read({ bearer: issued.tokens.valid })).error.code, 'denied');
