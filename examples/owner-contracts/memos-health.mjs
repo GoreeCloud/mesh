@@ -3,7 +3,7 @@ import { createExactHealthFixtureAdapter } from './exact-health-fixture.mjs';
 
 export const MEMOS_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/memos',
-  source_blob: '0a87bf75d5d9f48e39043b45b869949c5bab5f5f',
+  source_blob: '10c4d4224c72ab0f5c301e6aabbee6073ec91b37',
   method: 'GET',
   path: '/api/v1/health',
   mode: 'transport-injected-nonproduction',
