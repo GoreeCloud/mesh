@@ -12,11 +12,14 @@ const stamp = () => new Date().toISOString();
 const body = (state, observed_at = stamp()) =>
   JSON.stringify({ schema_version: 'wardveil.status.v1', state, observed_at }) + '\n';
 
-async function withServer(handle, check) {
+async function withServer(handle, check, { sourceHeaders = true } = {}) {
   const server = createServer((req, res) => {
-    // Match the exact security metadata the actual Wardveil Go handler emits.
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Match the Go handler by default. For deliberately raw duplicate-wire
+    // headers, keep this off so Node does not normalize the test response.
+    if (sourceHeaders) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
     handle(req, res);
   });
   await new Promise((resolve, reject) => {
@@ -101,11 +104,13 @@ test('duplicate Content-Type and large response metadata are refused', async () 
     res.writeHead(200, [
       ['Content-Type', 'application/json; charset=utf-8'],
       ['Content-Type', 'text/plain'],
+      ['Cache-Control', 'no-store'],
+      ['X-Content-Type-Options', 'nosniff'],
     ]);
     res.end(body('ok'));
   }, async port => {
     assert.equal((await read(harnessFor(port))).error.code, 'unavailable');
-  });
+  }, { sourceHeaders: false });
   await withServer((_req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -205,7 +210,7 @@ test('duplicated cache-control and nosniff headers are ambiguous and rejected', 
       res.end(body('ok'));
     }, async port => {
       assert.equal((await read(harnessFor(port))).error.code, 'unavailable');
-    });
+    }, { sourceHeaders: false });
   }
 });
 
