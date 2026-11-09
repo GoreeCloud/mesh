@@ -13,3 +13,28 @@ Contract rules:
 - The timeout abort signal can stop cooperative fixture reads. An uncooperative promise may continue in memory after its caller times out; this is **not** a production isolation boundary. Production adapters require process/network-level cancellation and protection against side effects.
 
 No part of this harness should be promoted as an operational Mesh integration until independently reviewed owner-side contracts, authorization, resilience and deployment evidence satisfy the release gates.
+
+
+## Opt-in correlation evidence and concurrency admission
+
+`evidence.mjs` adds a **nonproduction**, in-memory wrapper for the same synthetic `read()` interface. It never opens a socket, exports telemetry, performs a retry, changes the owner's response, grants a permission, or writes durable state. Opting into the wrapper creates a bounded ring of `mesh.synthetic-evidence.v1` terminal records containing **only** `schema_version`, a random local `correlation_id`, the enumerated `outcome`, and `observed_at`. No actor, request, capability name, response data, error text, credential, or raw payload is retained.
+
+```js
+import { createFixtureHarness } from './fixtures.mjs';
+import { createSyntheticReadObserver } from './evidence.mjs';
+
+const observer = createSyntheticReadObserver(createFixtureHarness(), {
+  capacity: 32, maxInFlight: 8,
+});
+const { correlation_id, response } = await observer.read({
+  actor: 'fixture.reader',
+  capabilityId: 'fixture.alpha.status',
+  operation: 'status.read',
+});
+const privateEvidence = observer.records();
+observer.clear(); // explicit in-memory retention control
+```
+
+The wrapper records completion order, not invocation order. It refuses an excess concurrent read **before** calling the owner, returning the existing typed `unavailable` outcome. Calls already running are governed by the underlying synthetic harness's timeout and cancellation limits; the observer cannot stop an owner that ignores cancellation. It passes through the original result object or thrown exception, without writing either into evidence. Invalid configuration/accessors/proxies are rejected before invoking untrusted getters. Correlation IDs are local diagnostics, not signed attestations, durable audit IDs, service health proofs, authorization tokens or permission to share evidence externally.
+
+Validation: `npm test` includes `evidence.test.mjs` alongside the existing synthetic contract tests. Live Identity, GoreeShield, Wardveil, production telemetry, durable delivery and real adapters remain unimplemented.
