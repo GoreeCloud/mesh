@@ -18,7 +18,7 @@
 
 **Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises strictly local, read-only discovery, fail-closed authorization, bounded concurrency and opt-in redacted diagnostic evidence. It does not itself connect to any product.
 
-**Source-specific development fixture:** [Wardveil health contract and loopback tests](examples/owner-contracts/README.md) exercise an inspected `GET /healthz` response over an injected transport and a disposable 127.0.0.1-only HTTP server. This is not a deployed Wardveil connector, a live GoreeCloud service health report, a real Identity authorization or a production API. The main branch remains a development preview; exact-head [Mesh stability and release gates](docs/stability-gates.md) apply.
+**Source-specific development verification:** [Wardveil health contract, isolated loopback transport, and genuine Go runtime acceptance](examples/owner-contracts/README.md) exercise a reviewed `GET /healthz` response against both a disposable Node test server and the **actual SHA-pinned Wardveil Go development executable in hosted CI**. The real-Go check covers service startup, default-deny local Mesh/owner callbacks, revocation, outage/restart, unauthenticated sensitive-route refusal and privacy-minimized in-memory outcomes. It is **not** a deployed connector, a remote Wardveil health report, real Identity enforcement, an authenticated stable owner API or a production authorization. [Mesh stability and release gates](docs/stability-gates.md) remain open.
 
 ## 1. Overview
 
