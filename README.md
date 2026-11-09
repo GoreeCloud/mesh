@@ -7,7 +7,7 @@
 | Document type | Product vision and platform capabilities specification |
 | Product | GoreeCloud Mesh |
 | Responsible authority | GoreeCloud founder |
-| Status | Founder-directed platform vision; implementation and deployment unverified |
+| Status | Founder-directed platform vision; tested local contract fixtures only; no deployed integration fabric |
 | Prepared | October 25, 2026 |
 | Version | Not assigned |
 | Canonical repository | [`GoreeCloud/mesh`](https://github.com/GoreeCloud/mesh) |
@@ -16,7 +16,9 @@
 
 **Engineering checkpoint:** [Evidence-based stability and release gates](docs/stability-gates.md) define safe implementation sequencing, ownership boundaries, and evidence required before claiming an operational Mesh capability.
 
-**Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises a strictly local, read-only contract and automated denial/failure tests. It does not connect to any GoreeCloud product or external system.
+**Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises strictly local, read-only discovery, fail-closed authorization, bounded concurrency and opt-in redacted diagnostic evidence. It does not itself connect to any product.
+
+**Source-specific development fixture:** [Wardveil health contract and loopback tests](examples/owner-contracts/README.md) exercise an inspected `GET /healthz` response over an injected transport and a disposable 127.0.0.1-only HTTP server. This is not a deployed Wardveil connector, a live GoreeCloud service health report, a real Identity authorization or a production API. The main branch remains a development preview; exact-head [Mesh stability and release gates](docs/stability-gates.md) apply.
 
 ## 1. Overview
 
