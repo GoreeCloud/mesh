@@ -88,6 +88,37 @@ test('oversized body fails under the fixed 256-byte maximum', async () => {
   });
 });
 
+test('duplicate Content-Type headers cannot masquerade as Wardveil health', async () => {
+  await withServer((_req, res) => {
+    res.writeHead(200, [
+      ['Content-Type', 'application/json; charset=utf-8'],
+      ['Content-Type', 'text/plain'],
+    ]);
+    res.end(healthy);
+  }, async port => {
+    const transport = createLoopbackWardveilHealthTransport({ port });
+    const result = await read(fixture(transport));
+    assert.deepEqual(result, { ok: false, error: { code: 'unavailable' } });
+  });
+});
+
+test('oversized response headers are refused and a later probe recovers', async () => {
+  let calls = 0;
+  await withServer((_req, res) => {
+    calls += 1;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (calls === 1) res.setHeader('X-Oversized', 'x'.repeat(4096));
+    res.end(healthy);
+  }, async port => {
+    const transport = createLoopbackWardveilHealthTransport({ port });
+    const first = await read(fixture(transport));
+    assert.equal(first.error.code, 'unavailable');
+    const recovered = await read(fixture(transport));
+    assert.equal(recovered.ok, true);
+    assert.deepEqual(recovered.data, { state: 'ok', observed_at });
+  });
+});
+
 test('timeout and pre-aborted signal reject without exposing transport details', async () => {
   await withServer(() => {}, async port => {
     const transport = createLoopbackWardveilHealthTransport({ port, timeoutMs: 30 });

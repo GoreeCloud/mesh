@@ -64,9 +64,22 @@ export function createLoopbackWardveilHealthTransport(options) {
       try {
         req = httpRequest({
           host: '127.0.0.1', family: 4, port, method: 'GET', path: '/healthz',
-          agent: false, signal: fields.signal,
+          agent: false, signal: fields.signal, maxHeaderSize: 2048,
           headers: { Accept: 'application/json', Connection: 'close' },
         }, res => {
+          // Node may normalize duplicate response headers. Reject ambiguous
+          // Content-Type at the raw wire boundary before trusting its value.
+          const contentTypes = [];
+          for (let i = 0; i < res.rawHeaders.length; i += 2) {
+            if (res.rawHeaders[i].toLowerCase() === 'content-type') {
+              contentTypes.push(res.rawHeaders[i + 1]);
+            }
+          }
+          if (contentTypes.length !== 1) {
+            req.destroy();
+            fail();
+            return;
+          }
           const chunks = [];
           let size = 0;
           res.on('data', chunk => {
@@ -80,10 +93,9 @@ export function createLoopbackWardveilHealthTransport(options) {
           });
           res.on('end', () => {
             if (fields.signal.aborted) return fail();
-            const contentType = res.headers['content-type'];
             succeed({
               status: res.statusCode,
-              contentType: typeof contentType === 'string' ? contentType : '',
+              contentType: contentTypes[0],
               body: Buffer.concat(chunks).toString('utf8'),
             });
           });
