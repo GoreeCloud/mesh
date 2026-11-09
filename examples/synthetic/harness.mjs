@@ -189,6 +189,18 @@ export function createSyntheticHarness(options = {}) {
       // Reserve a slot before any Mesh or owner authorization starts.
       if (inFlight >= maxConcurrentReads) return failure('unavailable');
       inFlight += 1;
+      // Keep the admission slot until the underlying authorization/read has
+      // actually settled, even when its caller has already timed out.
+      // Otherwise repeated noncooperative owners can accumulate unbounded
+      // work while every timed-out caller immediately frees a new slot.
+      let released = false;
+      let actionStarted = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          inFlight -= 1;
+        }
+      };
       try {
         const controller = new AbortController();
         let timer;
@@ -244,6 +256,11 @@ export function createSyntheticHarness(options = {}) {
             return { kind: 'unavailable' };
           }
         })();
+        actionStarted = true;
+        // A timed-out caller can return immediately, but capacity remains
+        // reserved until the owner settles. The rejection handler prevents an
+        // eventual late rejection from leaking an unhandled promise.
+        void action.then(release, release);
         try {
           const outcome = await Promise.race([action, timeout]);
           if (outcome.kind === 'timeout') return failure('timed_out');
@@ -263,8 +280,9 @@ export function createSyntheticHarness(options = {}) {
           controller.abort();
         }
       } finally {
-        // Release on success, denial, timeout or invalid response.
-        inFlight -= 1;
+        // Failed setup cannot strand capacity. A successfully started action
+        // releases its own slot, including after a timed-out caller returns.
+        if (!actionStarted) release();
       }
     },
   });
