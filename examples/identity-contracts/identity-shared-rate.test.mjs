@@ -40,7 +40,13 @@ test('new Identity readers cannot evade 64 starts per rolling minute in one proc
   );
   assert.equal(forbiddenCalls, 0);
 
-  for (let i = 0; i < 64; i++) {
+  // A throwing verifier counts as one attempted start, just like denial.
+  const erroring = reader(() => {
+    calls++;
+    throw new Error('private verifier detail');
+  });
+  assert.deepEqual(await erroring.read({ bearer }), denied);
+  for (let i = 0; i < 63; i++) {
     const gate = reader(() => { calls++; return false; });
     assert.deepEqual(await gate.read({ bearer }), denied,
       'a normal denied Identity decision still consumes one attempted start');
@@ -57,7 +63,7 @@ test('new Identity readers cannot evade 64 starts per rolling minute in one proc
     'over-budget calls must not reach Identity or its owning source');
 });
 
-test('throwing verifier also consumes attempted start budget and is redacted', async () => {
+test('over-budget reader cannot invoke throwing verifier or leak details', async () => {
   // Previous test used the entire shared process budget. A new gate must
   // refuse *before* invoking any caller-supplied verifier callback.
   let attempts = 0;
