@@ -50,12 +50,23 @@ export function createIsolatedSyntheticOwner(options) {
     while (starts.length && now - starts[0] >= LAUNCH_WINDOW_MS) starts.shift();
   };
 
+  // An exported owner adapter may also receive direct untrusted callers.
+  // Destructure no user-supplied context before validating its descriptors.
+  const safeSignal = context => {
+    const value = fields(context, ['signal']);
+    try {
+      return value?.signal instanceof AbortSignal ? value.signal : null;
+    } catch { return null; }
+  };
+
   return Object.freeze({
-    async authorize(actor, capability, { signal } = {}) {
+    async authorize(actor, capability, context = {}) {
+      const signal = safeSignal(context);
+      if (!signal) return false;
       try {
-        if (signal?.aborted) return false;
+        if (signal.aborted) return false;
         const allowed = (await permit(actor, capability, { signal })) === true;
-        return allowed && !signal?.aborted;
+        return allowed && !signal.aborted;
       } catch { return false; }
     },
     activeCount() { return active; },
@@ -63,9 +74,10 @@ export function createIsolatedSyntheticOwner(options) {
       pruneStarts(performance.now());
       return starts.length;
     },
-    async readStatus({ signal } = {}) {
+    async readStatus(context = {}) {
+      const signal = safeSignal(context);
       try {
-        if (!(signal instanceof AbortSignal) || signal.aborted || active >= maxConcurrent) {
+        if (!signal || signal.aborted || active >= maxConcurrent) {
           throw unavailable();
         }
       } catch {

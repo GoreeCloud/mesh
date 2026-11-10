@@ -115,6 +115,31 @@ test('configuration and abort traps are rejected without executing getters', asy
   assert.equal(adapter.activeCount(), 0);
 });
 
+test('untrusted direct worker contexts cannot execute getters or escape generic denial', async () => {
+  let getterCalls = 0;
+  let permitCalls = 0;
+  const adapter = owner('ok', { permit: () => { permitCalls++; return true; } });
+  const accessor = Object.defineProperty({}, 'signal', {
+    get() { getterCalls++; throw new Error('private data'); },
+  });
+  const hostile = [
+    accessor, null, [], { signal: null },
+    { signal: new AbortController().signal, extra: 'unexpected' },
+    new Proxy({}, { ownKeys() { throw new Error('private proxy data'); } }),
+  ];
+  for (const context of hostile) {
+    assert.equal(await adapter.authorize('fixture.reader', manifest[0], context), false);
+    await assert.rejects(adapter.readStatus(context), /^Error: isolated fixture unavailable$/);
+  }
+  assert.equal(getterCalls, 0);
+  assert.equal(permitCalls, 0);
+  assert.equal(adapter.activeCount(), 0);
+  assert.equal(adapter.launchesInWindow(), 0);
+  assert.equal(await adapter.authorize('fixture.reader', manifest[0],
+    { signal: new AbortController().signal }), true);
+  assert.equal(permitCalls, 1);
+});
+
 test('hostile AbortSignal hooks cannot release a live child lease before CLOSE', async () => {
   const signal = new AbortController().signal;
   let cleanupCalls = 0;
