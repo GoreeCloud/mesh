@@ -16,6 +16,11 @@ const unavailable = () => new Error('isolated fixture unavailable');
 // It is NOT a production worker quota, global supervisor, or OS sandbox.
 const MAX_LAUNCHES_PER_WINDOW = 16;
 const LAUNCH_WINDOW_MS = 60_000;
+// Shared only by owner instances in this one Node process. This closes the
+// unlimited-instance bypass of each instance's own maxConcurrent budget.
+// NOT an OS-wide cgroup limit, process manager, or production sandbox.
+const MAX_GLOBAL_CHILDREN = 8;
+let globalActive = 0;
 
 function fields(value, expected) {
   try {
@@ -116,7 +121,8 @@ export function createIsolatedSyntheticOwner(options) {
       const signal = safeSignal(context);
       try {
         if (!signal || !authorizedSignals.delete(signal) ||
-            signal.aborted || active >= maxConcurrent) {
+            signal.aborted || active >= maxConcurrent ||
+            globalActive >= MAX_GLOBAL_CHILDREN) {
           throw unavailable();
         }
       } catch {
@@ -131,6 +137,7 @@ export function createIsolatedSyntheticOwner(options) {
       // One child = one read; admission is held until actual child CLOSE,
       // even if the caller times out or aborts first.
       active += 1;
+      globalActive += 1;
       return new Promise((resolve, reject) => {
         let child;
         let timer;
@@ -139,7 +146,11 @@ export function createIsolatedSyntheticOwner(options) {
         let output = '';
         let size = 0;
         const release = () => {
-          if (!released) { released = true; active -= 1; }
+          if (!released) {
+            released = true;
+            active -= 1;
+            globalActive -= 1;
+          }
           clearTimeout(timer);
           // A caller may shadow EventTarget cleanup on a genuine AbortSignal.
           // Cleanup must never throw from the child CLOSE handler.
