@@ -3,7 +3,7 @@ import { createExactHealthFixtureAdapter } from './exact-health-fixture.mjs';
 
 export const TASKS_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/tasks',
-  source_blob: '12dc998bdc303e6efab7e896f384041563115977',
+  source_blob: 'd3b0b1a554608f53afcd50ae5641295d17b564e0',
   method: 'GET',
   path: '/healthz',
   mode: 'transport-injected-nonproduction',
