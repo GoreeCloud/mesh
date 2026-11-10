@@ -100,3 +100,22 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 4. Consider write orchestration only after scoped authorization, idempotency, approval, rollback and source-observed outcomes are tested.
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
+
+## VPN endpoint source sync (November 9, 2026 — development-only)
+
+A new isolated Mesh CI candidate advances the trusted `GoreeCloud/VPN`
+management source from `13973c531d9c9147cdd353c06656e7ae4a796cf8`
+to exact reviewed and post-merge-tested `f232571d8c40211d9a5e8e177cee2b75970926e2`.
+The workflow verifies actual Git checkout commit and unchanged file blobs,
+explicitly updates the `core.py` Git blob check to
+`7a198a1d2f84e30e0fe84736cf0d1424ccedf221`, and runs the existing
+HTTP management unit tests **plus** the new offline
+`test_endpoint_hostname.py` regression before exercising the source-owned
+management server on a disposable loopback port.
+
+This tests canonical endpoint syntax rejection and local management/health
+fixture compatibility. It does **not** resolve an endpoint hostname, establish
+a WireGuard tunnel, verify X25519 enrollment, install packet filters, open a
+network ingress listener, or deliver a production Mesh-to-VPN connector.
+Source checks and hosted CI are distinct acceptance gates; this record
+documents the proposed integration until exact-head and post-merge checks pass.
