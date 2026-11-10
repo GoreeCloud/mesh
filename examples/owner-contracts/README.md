@@ -72,7 +72,7 @@ health responses:
   e19fa407a0a8811ed0bc105c9d3cdba3157bf071.
 - Memos: GET /api/v1/health, HTTP 200, JSON status ok with service
   goreecloud-memos. Verified source: GoreeCloud/memos server/app.py Git blob
-  10c4d4224c72ab0f5c301e6aabbee6073ec91b37.
+  4a607701787a7ef6791d5a5dbf600938ecb3a4ed.
 
 The new tasks-healthz.mjs, memos-health.mjs and exact-health-fixture.mjs
 provide **transport-injected synthetic-only** projections from these exact
@@ -141,3 +141,12 @@ Wardveil security enforcement, TLS/host trust, a verified fixed target
 process, monitoring and source/version/release approval. The current
 source is development-only and may change; an exact status fixture is not
 production integration acceptance.
+
+**Memos source refresh, November 10, 2026:** Memos development main
+f8e7795b5a2d6dd5494617d32df5db87a67fcb7d, following PR #69,
+was re-read and the exact server/app.py Git blob re-pinned above.
+PR #69 changes the lifetime of per-operation SQLite connections,
+not the unauthenticated GET /api/v1/health handler or its status
+response. This is only source-evidence reconciliation; it adds no
+user-data transport, Identity decision, production endpoint,
+monitoring daemon or release.
