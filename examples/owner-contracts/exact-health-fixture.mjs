@@ -29,7 +29,7 @@ function unavailable() { return new Error('source health unavailable'); }
  */
 export function createExactHealthFixtureAdapter(options, contract) {
   const fields = snapshot(options, ['transport', 'permit', 'clock'], ['transport']);
-  const source = snapshot(contract, ['path', 'body', 'contentType']);
+  const source = snapshot(contract, ['path', 'body', 'contentType'], ['path', 'body']);
   // Defaults preserve existing owner contracts. DAV's PHP handler explicitly
   // sends application/json without a charset parameter; do not normalize it.
   const expectedContentType = source?.contentType ?? 'application/json; charset=utf-8';
