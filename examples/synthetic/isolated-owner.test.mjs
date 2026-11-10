@@ -16,6 +16,10 @@ const harness = adapter => createSyntheticHarness({
   timeoutMs: 950,
 });
 const read = h => h.read({ actor: 'fixture.reader', capabilityId: ID });
+const grant = async (adapter, signal) => {
+  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), true);
+  return signal;
+};
 
 test('fixed-code subprocess returns an exact synthetic status to Mesh', async () => {
   for (const mode of ['ok', 'degraded']) {
@@ -56,18 +60,21 @@ test('worker crash and oversized output cannot become synthetic success', async 
 
 test('kill a stalled subprocess at the real deadline and free its slot', async () => {
   const adapter = owner('hang', { deadlineMs: 120 });
-  const first = adapter.readStatus({ signal: new AbortController().signal });
+  const firstSignal = await grant(adapter, new AbortController().signal);
+  const first = adapter.readStatus({ signal: firstSignal });
   assert.equal(adapter.activeCount(), 1);
+  const saturatedSignal = await grant(adapter, new AbortController().signal);
   await assert.rejects(
-    adapter.readStatus({ signal: new AbortController().signal }),
+    adapter.readStatus({ signal: saturatedSignal }),
     /isolated fixture unavailable/,
   );
   await assert.rejects(first, /isolated fixture unavailable/);
   for (let i = 0; i < 25 && adapter.activeCount(); i++) await delay(10);
   assert.equal(adapter.activeCount(), 0, 'a killed subprocess must actually close');
-  // A further request is admitted (but fails again on its own deadline).
+  // A further authorized request is admitted (but fails on its own deadline).
+  const nextSignal = await grant(adapter, new AbortController().signal);
   await assert.rejects(
-    adapter.readStatus({ signal: new AbortController().signal }),
+    adapter.readStatus({ signal: nextSignal }),
     /isolated fixture unavailable/,
   );
 });
@@ -75,6 +82,7 @@ test('kill a stalled subprocess at the real deadline and free its slot', async (
 test('cooperative caller abort kills subprocess and cannot reuse active slot early', async () => {
   const controller = new AbortController();
   const adapter = owner('hang', { deadlineMs: 700 });
+  await grant(adapter, controller.signal);
   const running = adapter.readStatus({ signal: controller.signal });
   assert.equal(adapter.activeCount(), 1);
   controller.abort();
@@ -140,6 +148,48 @@ test('untrusted direct worker contexts cannot execute getters or escape generic 
   assert.equal(permitCalls, 1);
 });
 
+test('direct synthetic owner reads require a single-use successful authorization', async () => {
+  let permitted = true;
+  let policyCalls = 0;
+  const adapter = owner('ok', { permit: () => { policyCalls++; return permitted; } });
+  const signal = new AbortController().signal;
+  await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  assert.equal(adapter.launchesInWindow(), 0, 'bypass must not start a child');
+
+  await grant(adapter, signal);
+  const result = await adapter.readStatus({ signal });
+  assert.equal(result.state, 'ok');
+  assert.equal(adapter.activeCount(), 0);
+  assert.equal(adapter.launchesInWindow(), 1);
+  await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  assert.equal(adapter.launchesInWindow(), 1, 'used grant cannot spawn twice');
+
+  permitted = false;
+  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), false);
+  await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  assert.equal(policyCalls, 2);
+  assert.equal(adapter.launchesInWindow(), 1);
+});
+
+test('late owner policy approval cannot defeat a newer authorization denial', async () => {
+  let resolveFirst;
+  let requests = 0;
+  const adapter = owner('ok', {
+    permit: () => ++requests === 1
+      ? new Promise(resolve => { resolveFirst = resolve; })
+      : false,
+  });
+  const signal = new AbortController().signal;
+  const pending = adapter.authorize('fixture.reader', manifest[0], { signal });
+  assert.equal(typeof resolveFirst, 'function');
+  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), false);
+  resolveFirst(true);
+  assert.equal(await pending, false, 'stale policy approval must not issue a ticket');
+  await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  assert.equal(adapter.activeCount(), 0);
+  assert.equal(adapter.launchesInWindow(), 0);
+});
+
 test('hostile AbortSignal hooks cannot release a live child lease before CLOSE', async () => {
   const signal = new AbortController().signal;
   let cleanupCalls = 0;
@@ -150,6 +200,7 @@ test('hostile AbortSignal hooks cannot release a live child lease before CLOSE',
     value() { cleanupCalls++; throw new Error('private cleanup failure'); },
   });
   const adapter = owner('hang', { deadlineMs: 700 });
+  await grant(adapter, signal);
   const failed = adapter.readStatus({ signal });
   // The child has already been spawned and the faulty listener rejected.
   // Capacity must remain charged synchronously until the OS closes it.
@@ -168,6 +219,7 @@ test('fixed-code owner budget blocks rapid crash/restart churn without new child
   const adapter = owner('crash', { deadlineMs: 700, maxConcurrent: 1 });
   const signal = new AbortController().signal;
   for (let i = 0; i < 16; i++) {
+    await grant(adapter, signal);
     await assert.rejects(
       adapter.readStatus({ signal }), /isolated fixture unavailable/
     );
@@ -176,6 +228,7 @@ test('fixed-code owner budget blocks rapid crash/restart churn without new child
   }
   // More callers cannot trigger additional spawn attempts within the budget.
   for (let i = 0; i < 10; i++) {
+    await grant(adapter, signal);
     await assert.rejects(
       adapter.readStatus({ signal }), /isolated fixture unavailable/
     );
@@ -187,11 +240,13 @@ test('fixed-code owner budget blocks rapid crash/restart churn without new child
 test('over-capacity and invalid callers never consume the child launch budget', async () => {
   const adapter = owner('hang', { deadlineMs: 100, maxConcurrent: 1 });
   const ctrl = new AbortController();
+  await grant(adapter, ctrl.signal);
   const first = adapter.readStatus({ signal: ctrl.signal });
   assert.equal(adapter.activeCount(), 1);
   assert.equal(adapter.launchesInWindow(), 1);
+  const overCapacity = await grant(adapter, new AbortController().signal);
   await assert.rejects(
-    adapter.readStatus({ signal: new AbortController().signal }),
+    adapter.readStatus({ signal: overCapacity }),
     /isolated fixture unavailable/
   );
   await assert.rejects(adapter.readStatus({ signal: null }),
