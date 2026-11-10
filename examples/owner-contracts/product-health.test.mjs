@@ -37,7 +37,7 @@ for (const item of products) {
     assert.match(item.contract.source_blob, /^[a-f0-9]{40}$/);
     const inspected = {
       tasks: 'e19fa407a0a8811ed0bc105c9d3cdba3157bf071',
-      memos: '10c4d4224c72ab0f5c301e6aabbee6073ec91b37',
+      memos: '4a607701787a7ef6791d5a5dbf600938ecb3a4ed',
       'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
     };
     assert.equal(item.contract.source_blob, inspected[item.owner],
