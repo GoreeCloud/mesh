@@ -136,7 +136,7 @@ test('Workspace Teams health cannot be confused with Tasks or Memos health or pr
   for (const body of [
     products.find(p => p.owner === 'tasks').body,
     products.find(p => p.owner === 'memos').body,
-    products.find(p => p.owner === 'DAV').body,
+    products.find(p => p.owner === 'dav').body,
     '{"status":"ok","user":"private"}',
     '{"initialized":false,"user":null}',
     '{"status":"ok","status":"ok"}',
