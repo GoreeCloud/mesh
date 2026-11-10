@@ -138,3 +138,42 @@ test('hostile AbortSignal hooks cannot release a live child lease before CLOSE',
   assert.equal(adapter.activeCount(), 0, 'CLOSE eventually releases the lease');
   assert.equal(cleanupCalls, 1, 'faulty cleanup is contained, not propagated');
 });
+
+test('fixed-code owner budget blocks rapid crash/restart churn without new children', async () => {
+  const adapter = owner('crash', { deadlineMs: 700, maxConcurrent: 1 });
+  const signal = new AbortController().signal;
+  for (let i = 0; i < 16; i++) {
+    await assert.rejects(
+      adapter.readStatus({ signal }), /isolated fixture unavailable/
+    );
+    assert.equal(adapter.activeCount(), 0, 'crashed child must close before slot release');
+    assert.equal(adapter.launchesInWindow(), i + 1);
+  }
+  // More callers cannot trigger additional spawn attempts within the budget.
+  for (let i = 0; i < 10; i++) {
+    await assert.rejects(
+      adapter.readStatus({ signal }), /isolated fixture unavailable/
+    );
+    assert.equal(adapter.launchesInWindow(), 16);
+    assert.equal(adapter.activeCount(), 0);
+  }
+});
+
+test('over-capacity and invalid callers never consume the child launch budget', async () => {
+  const adapter = owner('hang', { deadlineMs: 100, maxConcurrent: 1 });
+  const ctrl = new AbortController();
+  const first = adapter.readStatus({ signal: ctrl.signal });
+  assert.equal(adapter.activeCount(), 1);
+  assert.equal(adapter.launchesInWindow(), 1);
+  await assert.rejects(
+    adapter.readStatus({ signal: new AbortController().signal }),
+    /isolated fixture unavailable/
+  );
+  await assert.rejects(adapter.readStatus({ signal: null }),
+    /isolated fixture unavailable/);
+  assert.equal(adapter.launchesInWindow(), 1);
+  ctrl.abort();
+  await assert.rejects(first, /isolated fixture unavailable/);
+  for (let i = 0; i < 40 && adapter.activeCount(); i++) await delay(10);
+  assert.equal(adapter.activeCount(), 0);
+});
