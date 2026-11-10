@@ -24,7 +24,7 @@ function snapshot(value, allowed, required = allowed) {
 function unavailable() { return new Error('source health unavailable'); }
 
 /**
- * Shared synthetic-only adapter for two separately inspected owner health APIs.
+ * Shared synthetic-only adapter for separately inspected owner health APIs.
  * The supplied transport is an injected function, not a network client.
  */
 export function createExactHealthFixtureAdapter(options, contract) {
@@ -33,7 +33,7 @@ export function createExactHealthFixtureAdapter(options, contract) {
   if (!fields || !source || typeof fields.transport !== 'function' ||
       (own(fields, 'permit') && typeof fields.permit !== 'function') ||
       (own(fields, 'clock') && typeof fields.clock !== 'function') ||
-      !['/healthz', '/api/v1/health'].includes(source.path) ||
+      !['/healthz', '/api/v1/health', '/api/health'].includes(source.path) ||
       typeof source.body !== 'string' || source.body.length > 128 ||
       Buffer.byteLength(source.body, 'utf8') > 128) {
     throw new TypeError('invalid owner health fixture options');

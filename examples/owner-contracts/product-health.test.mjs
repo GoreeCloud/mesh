@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createSyntheticHarness, CONTRACT_VERSION } from '../synthetic/harness.mjs';
 import { createTasksHealthFixtureAdapter, TASKS_HEALTH_CONTRACT } from './tasks-healthz.mjs';
 import { createMemosHealthFixtureAdapter, MEMOS_HEALTH_CONTRACT } from './memos-health.mjs';
+import { createWorkspaceTeamsHealthFixtureAdapter, WORKSPACE_TEAMS_HEALTH_CONTRACT } from './workspace-teams-health.mjs';
 
 const seenAt = '2026-11-09T00:00:00.000Z';
 const products = [
@@ -10,6 +11,9 @@ const products = [
     contract: TASKS_HEALTH_CONTRACT, body: '{"status":"ok","mode":"loopback-development"}' },
   { name: 'Memos', id: 'memos.health', owner: 'memos', create: createMemosHealthFixtureAdapter,
     contract: MEMOS_HEALTH_CONTRACT, body: '{"status": "ok", "service": "goreecloud-memos"}' },
+  { name: 'Workspace Teams', id: 'workspace-teams.health', owner: 'workspace-teams',
+    create: createWorkspaceTeamsHealthFixtureAdapter, contract: WORKSPACE_TEAMS_HEALTH_CONTRACT,
+    body: '{"status":"ok"}' },
 ];
 const reply = body => ({ status: 200, contentType: 'application/json; charset=utf-8', body });
 function makeHarness(item, options) {
@@ -34,6 +38,7 @@ for (const item of products) {
     const inspected = {
       tasks: 'e19fa407a0a8811ed0bc105c9d3cdba3157bf071',
       memos: '10c4d4224c72ab0f5c301e6aabbee6073ec91b37',
+      'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
     };
     assert.equal(item.contract.source_blob, inspected[item.owner],
                  'Update source pin only after reviewing its actual owner health route');
@@ -117,3 +122,33 @@ for (const item of products) {
     await assert.rejects(adapter.readStatus({ signal: abort.signal }), /source health unavailable/);
   });
 }
+
+
+test('Workspace Teams health cannot be confused with Tasks or Memos health or private API data', async () => {
+  const item = products.find(p => p.owner === 'workspace-teams');
+  let transportCalls = 0;
+  for (const body of [
+    products[0].body,
+    products[1].body,
+    '{"status":"ok","user":"private"}',
+    '{"initialized":false,"user":null}',
+    '{"status":"ok","status":"ok"}',
+  ]) {
+    const h = makeHarness(item, { permit: () => true, clock: () => seenAt,
+      transport: async params => {
+        transportCalls++;
+        assert.equal(params.path, '/api/health');
+        return reply(body);
+      },
+    });
+    const result = await read(h, item);
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, 'unavailable');
+    assert.equal(JSON.stringify(result).includes('private'), false);
+  }
+  assert.equal(transportCalls, 5);
+  const denied = makeHarness(item, {
+    transport: () => { throw Error('Unauthorized transport call'); },
+  });
+  assert.equal((await read(denied, item)).error.code, 'denied');
+});
