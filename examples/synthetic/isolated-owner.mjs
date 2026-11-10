@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 const childPath = fileURLToPath(new URL('./isolated-owner-child.mjs', import.meta.url));
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const modes = new Set(['ok', 'degraded', 'hang', 'crash', 'oversize', 'late']);
+const FIXTURE_OWNER = 'fixture.alpha';
+const FIXTURE_CAPABILITY = 'fixture.alpha.status';
+const ACTOR_ID = /^[a-z][a-z0-9.-]{1,63}$/;
 const unavailable = () => new Error('isolated fixture unavailable');
 // Per-fixture-instance launch budget prevents an unrestricted crash/spawn loop.
 // It is NOT a production worker quota, global supervisor, or OS sandbox.
@@ -32,6 +35,13 @@ function fields(value, expected) {
 }
 
 const outputPattern = /^\{"state":"(ok|degraded)","observed_at":"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z)"\}\n$/;
+
+function isOwnFixtureCapability(value) {
+  const c = fields(value, ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status']);
+  return !!c && c.id === FIXTURE_CAPABILITY && c.owner === FIXTURE_OWNER &&
+    c.version === '0.0.1-fixture' && c.operation === 'status.read' &&
+    c.sensitivity === 'synthetic' && c.evidence_status === 'prototype';
+}
 
 export function createIsolatedSyntheticOwner(options) {
   const c = fields(options, ['mode', 'permit', 'deadlineMs', 'maxConcurrent']);
@@ -75,7 +85,10 @@ export function createIsolatedSyntheticOwner(options) {
       authorizationVersions.set(signal, version);
       authorizedSignals.delete(signal);
       try {
-        if (signal.aborted) return false;
+        // This fixed-code child serves only fixture.alpha.status. Do not
+        // turn a permit for another advertised capability into a read ticket.
+        if (signal.aborted || typeof actor !== 'string' || !ACTOR_ID.test(actor) ||
+            !isOwnFixtureCapability(capability)) return false;
         const allowed = (await permit(actor, capability, { signal })) === true;
         if (!allowed || signal.aborted ||
             authorizationVersions.get(signal) !== version) return false;
