@@ -44,7 +44,23 @@ export function createIdentityVerifiedFixtureReader(options) {
   let verifying = 0;
 
   return Object.freeze({
-    async read(input) {
+    async read(input, context) {
+      // Only the trusted hosting transport may supply a cancellation signal.
+      // Inspect exact own data fields; never execute caller-owned getters.
+      let callerSignal;
+      if (context !== undefined) {
+        const controls = snapshot(context, ['signal']);
+        if (!controls) return deny();
+        try {
+          const intrinsic = Object.getOwnPropertyDescriptor(
+            AbortSignal.prototype, 'aborted',
+          )?.get;
+          if (typeof intrinsic !== 'function' ||
+              typeof intrinsic.call(controls.signal) !== 'boolean') return deny();
+          callerSignal = controls.signal;
+          if (intrinsic.call(callerSignal)) return deny();
+        } catch { return deny(); }
+      }
       const fields = snapshot(input, ['bearer']);
       const bearer = fields?.bearer;
       if (typeof bearer !== 'string' || bearer.length < 20 || bearer.length > 16384 ||
@@ -56,35 +72,50 @@ export function createIdentityVerifiedFixtureReader(options) {
       if (verifying >= config.maxConcurrent) return deny();
       verifying += 1;
       const controller = new AbortController();
+      const signal = callerSignal
+        ? AbortSignal.any([controller.signal, callerSignal])
+        : controller.signal;
       let released = false;
       let started = false;
       const release = () => {
         if (!released) { verifying -= 1; released = true; }
       };
       let timer;
+      let onAbort;
       try {
-        const timeout = new Promise(resolve => {
-          timer = setTimeout(() => { controller.abort(); resolve(false); }, config.timeoutMs);
+        // A disconnected caller stops waiting immediately. The verification
+        // slot remains charged until the verifier itself settles, even if
+        // it ignores abort. This prevents cancellation-based admission churn.
+        const canceled = new Promise(resolve => {
+          onAbort = () => resolve(false);
+          signal.addEventListener('abort', onAbort, { once: true });
+          if (signal.aborted) onAbort();
         });
+        timer = setTimeout(() => controller.abort(), config.timeoutMs);
         // Bearer and request-specific scope are passed directly to the trusted
         // verifier; no unverified claims or caller-supplied tenant is accepted.
         const verification = Promise.resolve().then(() =>
-          config.verifyBearer(bearer, SCOPE, { signal: controller.signal }));
+          signal.aborted ? false : config.verifyBearer(bearer, SCOPE, { signal }));
         started = true;
         void verification.then(release, release);
         let result;
-        try { result = await Promise.race([verification, timeout]); }
+        try { result = await Promise.race([verification, canceled]); }
         catch { return deny(); }
-        if (result !== true || controller.signal.aborted) return deny();
+        if (result !== true || signal.aborted) return deny();
         // The underlying Mesh harness runs its own independent owner permit,
         // admission and source status validation after Identity allows.
         try {
-          return await Reflect.apply(handler.read, owner, [{
-            actor: ACTOR, capabilityId: CAPABILITY, operation: 'status.read',
-          }]);
+          const outcome = await Promise.race([
+            Reflect.apply(handler.read, owner, [{
+              actor: ACTOR, capabilityId: CAPABILITY, operation: 'status.read',
+            }]),
+            canceled,
+          ]);
+          return signal.aborted || outcome === false ? deny() : outcome;
         } catch { return deny(); }
       } finally {
         if (timer) clearTimeout(timer);
+        if (onAbort) signal.removeEventListener('abort', onAbort);
         controller.abort();
         if (!started) release();
       }
