@@ -191,3 +191,24 @@ private task-list response on the fixed health path without exposing its
 content. This is source readback and synthetic CI, **not** a live authenticated
 Tasks connector, CardDAV/VTODO sync, a per-tenant readiness API, or production
 Identity/GoreeShield/Wardveil acceptance.
+
+## Tasks checkpoint-paging source refresh (November 10, 2026)
+
+The Tasks local-only development API on main commit
+`1afcc89276e6bb9ecaef1ad45976110f4ffb24da` now exposes a new
+**authenticated, opt-in** bounded `GET /v1/bootstrap-page` initial-snapshot
+contract, with UUID keyset pagination and a transactional change-log checkpoint.
+The verified `server/api.py` source is Git blob
+`d3b0b1a554608f53afcd50ae5641295d17b564e0`. A client must discard
+collected pages and restart upon HTTP 409 when concurrent task mutations change
+the checkpoint. This is compatible with the existing development-only
+unauthenticated `GET /healthz` response, which remains exactly
+`{"status":"ok","mode":"loopback-development"}`.
+
+**Mesh does not query, transport, cache, proxy, log, or share task snapshots.**
+Its same private, synthetic-only Tasks health fixture now pins the current
+verified owner blob and adds an explicit test that even a syntactically valid
+private bootstrap page response is rejected and redacted on the fixed health
+route. This is contract compatibility and data-boundary testing, not a released
+Identity tenant-scope integration, GoreeShield consent grant, Wardveil security
+signoff, native-client synchronization, or live service deployment.
