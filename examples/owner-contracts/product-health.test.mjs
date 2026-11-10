@@ -8,7 +8,7 @@ import { createWorkspaceTeamsHealthFixtureAdapter, WORKSPACE_TEAMS_HEALTH_CONTRA
 
 const seenAt = '2026-11-09T00:00:00.000Z';
 const products = [
-  { name: 'DAV / Contacts', id: 'dav.health', owner: 'DAV', create: createDavHealthFixtureAdapter,
+  { name: 'DAV / Contacts', id: 'dav.health', owner: 'dav', create: createDavHealthFixtureAdapter,
     contract: DAV_HEALTH_CONTRACT, body: '{"service":"goreecloud-dav","status":"up"}',
     contentType: 'application/json' },
   { name: 'Tasks', id: 'tasks.health', owner: 'tasks', create: createTasksHealthFixtureAdapter,
@@ -37,10 +37,10 @@ const read = (h, item) => h.read({ actor: 'fixture.reader', capabilityId: item.i
 
 for (const item of products) {
   test(item.name + ' contract pins the source and its read-only route', () => {
-    assert.equal(item.contract.source, 'GoreeCloud/' + item.owner);
+    assert.equal(item.contract.source, 'GoreeCloud/' + (item.owner === 'dav' ? 'DAV' : item.owner));
     assert.match(item.contract.source_blob, /^[a-f0-9]{40}$/);
     const inspected = {
-      DAV: '6a270d95c406def94482a9a4c6e9006c016a1e51',
+      dav: '6a270d95c406def94482a9a4c6e9006c016a1e51',
       tasks: 'e19fa407a0a8811ed0bc105c9d3cdba3157bf071',
       memos: '4a607701787a7ef6791d5a5dbf600938ecb3a4ed',
       'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
