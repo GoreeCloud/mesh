@@ -175,3 +175,19 @@ It does not fetch user contacts, task data or DAV paths, open sockets, or
 deploy a listener. Recheck the source and versioned trust boundary if DAV PR
 #1 is changed or merged; a future authenticated readiness API requires
 its own scope, consent, privacy and security review.
+
+## Tasks owner-source refresh (November 10, 2026)
+
+The Tasks development API `server/api.py` on the verified main commit
+`9db568bfe5236ecd4282a1e88f6f09ee26702dbf` has Git blob
+`12dc998bdc303e6efab7e896f384041563115977`. The original
+unauthenticated, loopback-only `GET /healthz` response remains exactly
+`{"status":"ok","mode":"loopback-development"}` with JSON UTF-8
+content type. The owner service now also guards parent symlink paths for its
+local SQLite stores and marks bounded `GET /v1/tasks` listings with
+`hasMore`, but those data operations are **not** reachable via this Mesh
+health fixture. Its source pin and strict regression now reject a synthetic
+private task-list response on the fixed health path without exposing its
+content. This is source readback and synthetic CI, **not** a live authenticated
+Tasks connector, CardDAV/VTODO sync, a per-tenant readiness API, or production
+Identity/GoreeShield/Wardveil acceptance.
