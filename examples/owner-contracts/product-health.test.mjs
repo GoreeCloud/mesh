@@ -41,7 +41,7 @@ for (const item of products) {
     assert.match(item.contract.source_blob, /^[a-f0-9]{40}$/);
     const inspected = {
       dav: '6a270d95c406def94482a9a4c6e9006c016a1e51',
-      tasks: 'e19fa407a0a8811ed0bc105c9d3cdba3157bf071',
+      tasks: '12dc998bdc303e6efab7e896f384041563115977',
       memos: '4a607701787a7ef6791d5a5dbf600938ecb3a4ed',
       'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
     };
@@ -129,6 +129,27 @@ for (const item of products) {
   });
 }
 
+
+
+test('Tasks fixture rejects even a well-formed private task list on the fixed health route', async () => {
+  const item = products.find(p => p.owner === 'tasks');
+  const privateBody = '{"tasks":[{"title":"private-task-fixture"}],"limit":1,"hasMore":false}';
+  let attempts = 0;
+  const harness = makeHarness(item, {
+    permit: () => true, clock: () => seenAt,
+    transport: async params => {
+      attempts++;
+      assert.equal(params.method, 'GET');
+      assert.equal(params.path, '/healthz');
+      return reply(privateBody);
+    },
+  });
+  const result = await read(harness, item);
+  assert.equal(attempts, 1);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'unavailable');
+  assert.equal(JSON.stringify(result).includes('private-task-fixture'), false);
+});
 
 test('Workspace Teams health cannot be confused with Tasks, Memos or DAV health or private API data', async () => {
   const item = products.find(p => p.owner === 'workspace-teams');
