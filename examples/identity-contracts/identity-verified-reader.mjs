@@ -9,6 +9,11 @@ const CAPABILITY = 'fixture.alpha.status';
 // Defense in depth for many independently constructed fixture-reader instances.
 // This is a per-Node-module-process cap, NOT a tenant/OS/global quota.
 const MAX_SHARED_VERIFIERS = 8;
+// A separate owner-read lease stays charged until the Mesh read *promise*
+// settles, even when the calling transport times out or disconnects.
+// One-process development admission; not a production OS-wide quota.
+const MAX_SHARED_OWNER_READS = 8;
+let sharedOwnerReads = 0;
 const MAX_SHARED_STARTS_PER_WINDOW = 64;
 const SHARED_START_WINDOW_MS = 60_000;
 let sharedVerifying = 0;
@@ -128,15 +133,26 @@ export function createIdentityVerifiedFixtureReader(options) {
         try { result = await Promise.race([verification, canceled]); }
         catch { return deny(); }
         if (result !== true || signal.aborted) return deny();
-        // The underlying Mesh harness runs its own independent owner permit,
-        // admission and source status validation after Identity allows.
+        // A verified Identity decision must not let separate reader/harness
+        // instances multiply noncooperative owner operations indefinitely.
+        // The Mesh harness separately enforces source permit and projection.
+        if (sharedOwnerReads >= MAX_SHARED_OWNER_READS) return deny();
+        sharedOwnerReads += 1;
+        let ownerSlotReleased = false;
+        const releaseOwner = () => {
+          if (!ownerSlotReleased) {
+            ownerSlotReleased = true;
+            sharedOwnerReads -= 1;
+          }
+        };
+        const read = Promise.resolve().then(() =>
+          signal.aborted ? false : Reflect.apply(handler.read, owner, [{
+            actor: ACTOR, capabilityId: CAPABILITY, operation: 'status.read',
+          }]));
+        // Caller cancellation must not free an unfinished owner read slot.
+        void read.then(releaseOwner, releaseOwner);
         try {
-          const outcome = await Promise.race([
-            Reflect.apply(handler.read, owner, [{
-              actor: ACTOR, capabilityId: CAPABILITY, operation: 'status.read',
-            }]),
-            canceled,
-          ]);
+          const outcome = await Promise.race([read, canceled]);
           return signal.aborted || outcome === false ? deny() : outcome;
         } catch { return deny(); }
       } finally {
