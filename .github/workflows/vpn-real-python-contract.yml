@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/VPN
-          ref: 13973c531d9c9147cdd353c06656e7ae4a796cf8
+          ref: f232571d8c40211d9a5e8e177cee2b75970926e2
           path: vpn-source
           persist-credentials: false
       - name: Setup Python 3.12
@@ -33,9 +33,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C vpn-source rev-parse HEAD)" = "13973c531d9c9147cdd353c06656e7ae4a796cf8"
+          test "$(git -C vpn-source rev-parse HEAD)" = "f232571d8c40211d9a5e8e177cee2b75970926e2"
           test "$(git -C vpn-source hash-object src/goreecloud_vpn/server.py)" = "d43c64e12c750205adc567e1cb4ba8ab4923685c"
-          test "$(git -C vpn-source hash-object src/goreecloud_vpn/core.py)" = "b306bdb9287e84a188aa518c65c7beff01270929"
+          test "$(git -C vpn-source hash-object src/goreecloud_vpn/core.py)" = "7a198a1d2f84e30e0fe84736cf0d1424ccedf221"
           test "$(git -C vpn-source hash-object src/goreecloud_vpn/plan.py)" = "4aaa06fb822182b1d298a1cc200920f2eac85282"
           test "$(git -C vpn-source hash-object src/goreecloud_vpn/diagnostics.py)" = "bcf9b40d980e7178d8bf6680bbfdab51711ab2be"
           test "$(git -C vpn-source hash-object src/goreecloud_vpn/__init__.py)" = "d964db1db674fedab9423f5cda49e7a5f230d2e0"
@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 -m compileall -q vpn-source/src/goreecloud_vpn
           python3 -m unittest discover -s vpn-source/tests -p test_http.py -v
+          python3 -m unittest discover -s vpn-source/tests -p test_endpoint_hostname.py -v
       - name: Exercise genuine Python management and strict Mesh fixture on owned loopback
         shell: bash
         env:
