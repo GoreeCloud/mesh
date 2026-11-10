@@ -114,3 +114,27 @@ test('configuration and abort traps are rejected without executing getters', asy
   await assert.rejects(adapter.readStatus({ signal: null }), /isolated fixture unavailable/);
   assert.equal(adapter.activeCount(), 0);
 });
+
+test('hostile AbortSignal hooks cannot release a live child lease before CLOSE', async () => {
+  const signal = new AbortController().signal;
+  let cleanupCalls = 0;
+  Object.defineProperty(signal, 'addEventListener', {
+    value() { throw new Error('private listener failure'); },
+  });
+  Object.defineProperty(signal, 'removeEventListener', {
+    value() { cleanupCalls++; throw new Error('private cleanup failure'); },
+  });
+  const adapter = owner('hang', { deadlineMs: 700 });
+  const failed = adapter.readStatus({ signal });
+  // The child has already been spawned and the faulty listener rejected.
+  // Capacity must remain charged synchronously until the OS closes it.
+  assert.equal(adapter.activeCount(), 1);
+  await assert.rejects(
+    adapter.readStatus({ signal: new AbortController().signal }),
+    /isolated fixture unavailable/,
+  );
+  await assert.rejects(failed, /isolated fixture unavailable/);
+  for (let i = 0; i < 40 && adapter.activeCount(); i++) await delay(10);
+  assert.equal(adapter.activeCount(), 0, 'CLOSE eventually releases the lease');
+  assert.equal(cleanupCalls, 1, 'faulty cleanup is contained, not propagated');
+});
