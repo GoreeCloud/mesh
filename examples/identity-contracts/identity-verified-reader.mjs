@@ -2,13 +2,22 @@
 // GoreeCloud Identity decision. It never parses JWTs, trusts caller claims,
 // performs source authorization by itself, or exports credentials.
 // The verifyBearer function MUST come from a separately trusted verifier.
+import { performance } from 'node:perf_hooks';
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const ACTOR = 'fixture.identity-verified';
 const CAPABILITY = 'fixture.alpha.status';
 // Defense in depth for many independently constructed fixture-reader instances.
 // This is a per-Node-module-process cap, NOT a tenant/OS/global quota.
 const MAX_SHARED_VERIFIERS = 8;
+const MAX_SHARED_STARTS_PER_WINDOW = 64;
+const SHARED_START_WINDOW_MS = 60_000;
 let sharedVerifying = 0;
+const sharedStarts = [];
+function pruneSharedStarts(now) {
+  while (sharedStarts.length && now - sharedStarts[0] >= SHARED_START_WINDOW_MS) {
+    sharedStarts.shift();
+  }
+}
 const SCOPE = Object.freeze({
   tenantId: 'synthetic-family', resource: 'wardveil.status', action: 'read',
 });
@@ -73,8 +82,15 @@ export function createIdentityVerifiedFixtureReader(options) {
       }
       // The local verification budget cannot authorize an operation after
       // timeout. Uncooperative verifier work retains its admission slot.
+      const now = performance.now();
+      pruneSharedStarts(now);
       if (verifying >= config.maxConcurrent ||
-          sharedVerifying >= MAX_SHARED_VERIFIERS) return deny();
+          sharedVerifying >= MAX_SHARED_VERIFIERS ||
+          sharedStarts.length >= MAX_SHARED_STARTS_PER_WINDOW) return deny();
+      // Charge one *attempted* verification before invoking the trusted
+      // verifier; failed, throwing and canceled verifier attempts count too.
+      // Constructing another reader cannot evade this process-local budget.
+      sharedStarts.push(now);
       verifying += 1;
       sharedVerifying += 1;
       const controller = new AbortController();
