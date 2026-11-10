@@ -1,0 +1,65 @@
+name: Pinned Gateway Go console and Mesh health contract (isolated)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  gateway-go-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout Mesh fixture without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Checkout reviewed Gateway Go source at immutable commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/gateway
+          ref: 05a7b29867a283f3645e58a176deef4d7233f74e
+          path: gateway-source
+          persist-credentials: false
+      - name: Setup Gateway's declared Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: gateway-source/go.mod
+          cache: false
+      - name: Setup Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify exact reviewed source and module metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C gateway-source rev-parse HEAD)" = '05a7b29867a283f3645e58a176deef4d7233f74e'
+          test "$(git -C gateway-source hash-object cmd/console/main.go)" = 'e17003e921f8ff9dfe1a7216151e6cb11f12c73c'
+          test "$(git -C gateway-source hash-object cmd/console/oidcauth.go)" = 'f1c6329d6630ae3c3ed26ed3716f0b4aa1c91835'
+          test "$(git -C gateway-source hash-object go.mod)" = '180f70e354b48b7660584469dd65f4f4f22d29d9'
+          test "$(git -C gateway-source hash-object go.sum)" = '864055122539c053d5e6f937f0e9cff6fe78f8fc'
+      - name: Resolve locked Go dependencies and verify downloaded modules
+        working-directory: gateway-source
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go mod download
+          go mod verify
+          git diff --exit-code -- go.mod go.sum
+      - name: Compile and source-test genuine isolated Gateway console
+        working-directory: gateway-source
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go test -mod=readonly ./cmd/console -run '^(TestConsoleBindSafety|TestReadOnlyOverview|TestOfflineState)$' -count=1
+          go build -mod=readonly -trimpath -buildvcs=false -o "$RUNNER_TEMP/gateway-console-dev" ./cmd/console
+      - name: Validate Mesh contract against the genuine Gateway console child
+        shell: bash
+        env:
+          GC_MESH_GATEWAY_ISOLATED_TEST: '1'
+        run: node examples/owner-contracts/gateway-real-go.smoke.mjs "$RUNNER_TEMP/gateway-console-dev"
