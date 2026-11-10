@@ -17,7 +17,7 @@ const harness = adapter => createSyntheticHarness({
 });
 const read = h => h.read({ actor: 'fixture.reader', capabilityId: ID });
 const grant = async (adapter, signal) => {
-  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), true);
+  assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[0], { signal }), true);
   return signal;
 };
 
@@ -136,16 +136,49 @@ test('untrusted direct worker contexts cannot execute getters or escape generic 
     new Proxy({}, { ownKeys() { throw new Error('private proxy data'); } }),
   ];
   for (const context of hostile) {
-    assert.equal(await adapter.authorize('fixture.reader', manifest[0], context), false);
+    assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[0], context), false);
     await assert.rejects(adapter.readStatus(context), /^Error: isolated fixture unavailable$/);
   }
   assert.equal(getterCalls, 0);
   assert.equal(permitCalls, 0);
   assert.equal(adapter.activeCount(), 0);
   assert.equal(adapter.launchesInWindow(), 0);
-  assert.equal(await adapter.authorize('fixture.reader', manifest[0],
+  assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[0],
     { signal: new AbortController().signal }), true);
   assert.equal(permitCalls, 1);
+});
+
+test('fixed-code owner denies permits for unrelated or forged capability identities', async () => {
+  let permits = 0;
+  let getterCalls = 0;
+  const adapter = owner('ok', { permit: () => { permits++; return true; } });
+  const wrong = [
+    manifest.capabilities[1],
+    { ...manifest.capabilities[0], owner: 'fixture.beta' },
+    { ...manifest.capabilities[0], id: 'fixture.beta.status' },
+    { ...manifest.capabilities[0], operation: 'status.write' },
+    { ...manifest.capabilities[0], sensitivity: 'personal' },
+    { ...manifest.capabilities[0], extra: 'unexpected' },
+    Object.defineProperty({ ...manifest.capabilities[0] }, 'id', {
+      get() { getterCalls++; return 'fixture.alpha.status'; },
+    }),
+    new Proxy({}, { ownKeys() { throw Error('private descriptor'); } }),
+  ];
+  const signal = new AbortController().signal;
+  for (const capability of wrong) {
+    assert.equal(await adapter.authorize('fixture.reader', capability, { signal }), false);
+    await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  }
+  assert.equal(await adapter.authorize('not a valid actor', manifest.capabilities[0], { signal }), false);
+  assert.equal(getterCalls, 0);
+  assert.equal(permits, 0, 'hostile/unrelated capability never reaches owner policy');
+  assert.equal(adapter.launchesInWindow(), 0);
+
+  await grant(adapter, signal);
+  assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[1], { signal }), false);
+  await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
+  assert.equal(permits, 1, 'later mismatched capability revoked prior read ticket');
+  assert.equal(adapter.launchesInWindow(), 0);
 });
 
 test('direct synthetic owner reads require a single-use successful authorization', async () => {
@@ -165,7 +198,7 @@ test('direct synthetic owner reads require a single-use successful authorization
   assert.equal(adapter.launchesInWindow(), 1, 'used grant cannot spawn twice');
 
   permitted = false;
-  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), false);
+  assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[0], { signal }), false);
   await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
   assert.equal(policyCalls, 2);
   assert.equal(adapter.launchesInWindow(), 1);
@@ -180,9 +213,9 @@ test('late owner policy approval cannot defeat a newer authorization denial', as
       : false,
   });
   const signal = new AbortController().signal;
-  const pending = adapter.authorize('fixture.reader', manifest[0], { signal });
+  const pending = adapter.authorize('fixture.reader', manifest.capabilities[0], { signal });
   assert.equal(typeof resolveFirst, 'function');
-  assert.equal(await adapter.authorize('fixture.reader', manifest[0], { signal }), false);
+  assert.equal(await adapter.authorize('fixture.reader', manifest.capabilities[0], { signal }), false);
   resolveFirst(true);
   assert.equal(await pending, false, 'stale policy approval must not issue a ticket');
   await assert.rejects(adapter.readStatus({ signal }), /^Error: isolated fixture unavailable$/);
