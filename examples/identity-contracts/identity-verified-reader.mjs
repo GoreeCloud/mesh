@@ -5,6 +5,10 @@
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const ACTOR = 'fixture.identity-verified';
 const CAPABILITY = 'fixture.alpha.status';
+// Defense in depth for many independently constructed fixture-reader instances.
+// This is a per-Node-module-process cap, NOT a tenant/OS/global quota.
+const MAX_SHARED_VERIFIERS = 8;
+let sharedVerifying = 0;
 const SCOPE = Object.freeze({
   tenantId: 'synthetic-family', resource: 'wardveil.status', action: 'read',
 });
@@ -69,8 +73,10 @@ export function createIdentityVerifiedFixtureReader(options) {
       }
       // The local verification budget cannot authorize an operation after
       // timeout. Uncooperative verifier work retains its admission slot.
-      if (verifying >= config.maxConcurrent) return deny();
+      if (verifying >= config.maxConcurrent ||
+          sharedVerifying >= MAX_SHARED_VERIFIERS) return deny();
       verifying += 1;
+      sharedVerifying += 1;
       const controller = new AbortController();
       const signal = callerSignal
         ? AbortSignal.any([controller.signal, callerSignal])
@@ -78,7 +84,11 @@ export function createIdentityVerifiedFixtureReader(options) {
       let released = false;
       let started = false;
       const release = () => {
-        if (!released) { verifying -= 1; released = true; }
+        if (!released) {
+          verifying -= 1;
+          sharedVerifying -= 1;
+          released = true;
+        }
       };
       let timer;
       let onAbort;
