@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/gateway
-          ref: 05a7b29867a283f3645e58a176deef4d7233f74e
+          ref: 5f976a38c688c0d366d8d82adf5464a36720729f
           path: gateway-source
           persist-credentials: false
       - name: Setup Gateway's declared Go toolchain
@@ -34,8 +34,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C gateway-source rev-parse HEAD)" = '05a7b29867a283f3645e58a176deef4d7233f74e'
-          test "$(git -C gateway-source hash-object cmd/console/main.go)" = 'e17003e921f8ff9dfe1a7216151e6cb11f12c73c'
+          test "$(git -C gateway-source rev-parse HEAD)" = '5f976a38c688c0d366d8d82adf5464a36720729f'
+          test "$(git -C gateway-source hash-object cmd/console/main.go)" = '45b7104824efcbf0019f93334546070a6ca0c561'
           test "$(git -C gateway-source hash-object cmd/console/oidcauth.go)" = 'f1c6329d6630ae3c3ed26ed3716f0b4aa1c91835'
           test "$(git -C gateway-source hash-object go.mod)" = '180f70e354b48b7660584469dd65f4f4f22d29d9'
           test "$(git -C gateway-source hash-object go.sum)" = '864055122539c053d5e6f937f0e9cff6fe78f8fc'
