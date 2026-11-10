@@ -150,3 +150,28 @@ not the unauthenticated GET /api/v1/health handler or its status
 response. This is only source-evidence reconciliation; it adds no
 user-data transport, Identity decision, production endpoint,
 monitoring daemon or release.
+
+## DAV / Contacts experimental health fixture (November 10, 2026)
+
+The **unmerged, undeployed** [GoreeCloud DAV PR #1](https://github.com/GoreeCloud/DAV/pull/1)
+contains `public/index.php` at reviewed Git blob
+`6a270d95c406def94482a9a4c6e9006c016a1e51`.
+Its unauthenticated `GET /healthz` handler sends HTTP 200,
+`Content-Type: application/json` (without an added charset parameter in
+the PHP handler) and the exact JSON
+`{"service":"goreecloud-dav","status":"up"}`.
+
+`dav-healthz.mjs` applies the same default-deny and transport-injected
+synthetic-only policy as the other owner fixtures. The common adapter now
+supports two *exact*, allowlisted source content types instead of silently
+assuming the DAV response includes a charset parameter. Its checks reject
+cross-product body swaps, unexpected headers, malformed responses, timeouts
+and missing permits. Only a minimized, caller-observed status is returned.
+
+This says nothing about real CardDAV contact synchronization, VTODO task
+synchronization, TLS or credential storage, DAV account authorization,
+per-principal readiness, actual availability, or production integration.
+It does not fetch user contacts, task data or DAV paths, open sockets, or
+deploy a listener. Recheck the source and versioned trust boundary if DAV PR
+#1 is changed or merged; a future authenticated readiness API requires
+its own scope, consent, privacy and security review.
