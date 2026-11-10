@@ -71,7 +71,9 @@ export function createIsolatedSyntheticOwner(options) {
         const release = () => {
           if (!released) { released = true; active -= 1; }
           clearTimeout(timer);
-          signal.removeEventListener('abort', onAbort);
+          // A caller may shadow EventTarget cleanup on a genuine AbortSignal.
+          // Cleanup must never throw from the child CLOSE handler.
+          try { signal.removeEventListener('abort', onAbort); } catch { /* fail closed */ }
         };
         const finish = value => {
           if (finished) return;
@@ -120,7 +122,10 @@ export function createIsolatedSyntheticOwner(options) {
           if (signal.aborted) kill();
         } catch {
           kill();
-          release();
+          // When spawn succeeded, OS capacity remains charged until CLOSE.
+          // In particular, a hostile AbortSignal listener may throw AFTER
+          // the subprocess started; immediate release would admit overlap.
+          if (!child) release();
         }
       });
     },
