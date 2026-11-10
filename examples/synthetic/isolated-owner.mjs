@@ -2,12 +2,17 @@
 // No arbitrary path/plugin execution, network target, user payload or secrets.
 // This is NOT an OS sandbox: the child retains the runner's FS/user privileges.
 import { spawn } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 const childPath = fileURLToPath(new URL('./isolated-owner-child.mjs', import.meta.url));
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const modes = new Set(['ok', 'degraded', 'hang', 'crash', 'oversize', 'late']);
 const unavailable = () => new Error('isolated fixture unavailable');
+// Per-fixture-instance launch budget prevents an unrestricted crash/spawn loop.
+// It is NOT a production worker quota, global supervisor, or OS sandbox.
+const MAX_LAUNCHES_PER_WINDOW = 16;
+const LAUNCH_WINDOW_MS = 60_000;
 
 function fields(value, expected) {
   try {
@@ -40,6 +45,10 @@ export function createIsolatedSyntheticOwner(options) {
   const deadlineMs = c.deadlineMs;
   const maxConcurrent = c.maxConcurrent;
   let active = 0;
+  const starts = [];
+  const pruneStarts = now => {
+    while (starts.length && now - starts[0] >= LAUNCH_WINDOW_MS) starts.shift();
+  };
 
   return Object.freeze({
     async authorize(actor, capability, { signal } = {}) {
@@ -50,6 +59,10 @@ export function createIsolatedSyntheticOwner(options) {
       } catch { return false; }
     },
     activeCount() { return active; },
+    launchesInWindow() {
+      pruneStarts(performance.now());
+      return starts.length;
+    },
     async readStatus({ signal } = {}) {
       try {
         if (!(signal instanceof AbortSignal) || signal.aborted || active >= maxConcurrent) {
@@ -58,6 +71,12 @@ export function createIsolatedSyntheticOwner(options) {
       } catch {
         throw unavailable();
       }
+      // Charge attempted process starts even when spawn fails. Never admit a
+      // crash loop as soon as each child closes; use monotonic time only.
+      const now = performance.now();
+      pruneStarts(now);
+      if (starts.length >= MAX_LAUNCHES_PER_WINDOW) throw unavailable();
+      starts.push(now);
       // One child = one read; admission is held until actual child CLOSE,
       // even if the caller times out or aborts first.
       active += 1;
