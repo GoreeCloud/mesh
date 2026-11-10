@@ -130,7 +130,7 @@ for (const item of products) {
 }
 
 
-test('Workspace Teams health cannot be confused with Tasks or Memos health or private API data', async () => {
+test('Workspace Teams health cannot be confused with Tasks, Memos or DAV health or private API data', async () => {
   const item = products.find(p => p.owner === 'workspace-teams');
   let transportCalls = 0;
   for (const body of [
@@ -153,7 +153,7 @@ test('Workspace Teams health cannot be confused with Tasks or Memos health or pr
     assert.equal(result.error.code, 'unavailable');
     assert.equal(JSON.stringify(result).includes('private'), false);
   }
-  assert.equal(transportCalls, 5);
+  assert.equal(transportCalls, 6);
   const denied = makeHarness(item, {
     transport: () => { throw Error('Unauthorized transport call'); },
   });
