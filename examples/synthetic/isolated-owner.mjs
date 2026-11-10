@@ -36,11 +36,19 @@ function fields(value, expected) {
 
 const outputPattern = /^\{"state":"(ok|degraded)","observed_at":"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z)"\}\n$/;
 
-function isOwnFixtureCapability(value) {
+function checkedOwnFixtureCapability(value) {
   const c = fields(value, ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status']);
-  return !!c && c.id === FIXTURE_CAPABILITY && c.owner === FIXTURE_OWNER &&
-    c.version === '0.0.1-fixture' && c.operation === 'status.read' &&
-    c.sensitivity === 'synthetic' && c.evidence_status === 'prototype';
+  if (!c || c.id !== FIXTURE_CAPABILITY || c.owner !== FIXTURE_OWNER ||
+      c.version !== '0.0.1-fixture' || c.operation !== 'status.read' ||
+      c.sensitivity !== 'synthetic' || c.evidence_status !== 'prototype') return null;
+  // Give delayed permit callbacks a stable, value-only descriptor. Passing
+  // the caller's original mutable object would let its identity change
+  // after admission but before the asynchronous policy actually reads it.
+  return Object.freeze({
+    id: c.id, owner: c.owner, version: c.version,
+    operation: c.operation, sensitivity: c.sensitivity,
+    evidence_status: c.evidence_status,
+  });
 }
 
 export function createIsolatedSyntheticOwner(options) {
@@ -87,9 +95,12 @@ export function createIsolatedSyntheticOwner(options) {
       try {
         // This fixed-code child serves only fixture.alpha.status. Do not
         // turn a permit for another advertised capability into a read ticket.
-        if (signal.aborted || typeof actor !== 'string' || !ACTOR_ID.test(actor) ||
-            !isOwnFixtureCapability(capability)) return false;
-        const allowed = (await permit(actor, capability, { signal })) === true;
+        if (signal.aborted || typeof actor !== 'string' || !ACTOR_ID.test(actor)) {
+          return false;
+        }
+        const checked = checkedOwnFixtureCapability(capability);
+        if (!checked) return false;
+        const allowed = (await permit(actor, checked, { signal })) === true;
         if (!allowed || signal.aborted ||
             authorizationVersions.get(signal) !== version) return false;
         authorizedSignals.add(signal);

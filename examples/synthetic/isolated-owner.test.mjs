@@ -148,6 +148,37 @@ test('untrusted direct worker contexts cannot execute getters or escape generic 
   assert.equal(permitCalls, 1);
 });
 
+test('async owner policy sees an immutable checked descriptor after caller mutation', async () => {
+  let continuePermit;
+  let policyDescriptor;
+  const adapter = owner('ok', {
+    permit: (_actor, checked) => {
+      policyDescriptor = checked;
+      return new Promise(resolve => { continuePermit = resolve; });
+    },
+  });
+  const callerOwned = { ...manifest.capabilities[0] };
+  const signal = new AbortController().signal;
+  const pending = adapter.authorize('fixture.reader', callerOwned, { signal });
+  assert.equal(typeof continuePermit, 'function');
+  assert.notEqual(policyDescriptor, callerOwned, 'policy must never see mutable input');
+  assert.equal(Object.isFrozen(policyDescriptor), true);
+
+  callerOwned.id = 'fixture.beta.status';
+  callerOwned.owner = 'fixture.beta';
+  callerOwned.sensitivity = 'personal';
+  assert.equal(policyDescriptor.id, 'fixture.alpha.status');
+  assert.equal(policyDescriptor.owner, 'fixture.alpha');
+  assert.equal(policyDescriptor.sensitivity, 'synthetic');
+  assert.deepEqual(Object.keys(policyDescriptor).sort(), [
+    'evidence_status', 'id', 'operation', 'owner', 'sensitivity', 'version'
+  ]);
+  continuePermit(true);
+  assert.equal(await pending, true);
+  assert.equal((await adapter.readStatus({ signal })).state, 'ok');
+  assert.equal(adapter.activeCount(), 0);
+});
+
 test('fixed-code owner denies permits for unrelated or forged capability identities', async () => {
   let permits = 0;
   let getterCalls = 0;
