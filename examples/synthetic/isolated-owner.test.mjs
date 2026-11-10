@@ -321,3 +321,43 @@ test('over-capacity and invalid callers never consume the child launch budget', 
   for (let i = 0; i < 40 && adapter.activeCount(); i++) await delay(10);
   assert.equal(adapter.activeCount(), 0);
 });
+
+test('multiple fixture instances cannot bypass the module-wide child cap', async () => {
+  const attempts = [];
+  for (let i = 0; i < 10; i++) {
+    const adapter = owner('hang', { deadlineMs: 650, maxConcurrent: 1 });
+    const signal = await grant(adapter, new AbortController().signal);
+    // Attach rejection handlers immediately; rejected admission must not
+    // generate an unhandled promise while later requests are submitted.
+    const outcome = adapter.readStatus({ signal }).then(
+      () => 'unexpected_success',
+      () => 'unavailable',
+    );
+    attempts.push({ adapter, outcome });
+  }
+  assert.equal(
+    attempts.filter(({ adapter }) => adapter.activeCount() === 1).length, 8,
+    'only eight disposable owner children may coexist across instances',
+  );
+  assert.equal(
+    attempts.reduce((sum, { adapter }) => sum + adapter.launchesInWindow(), 0), 8,
+    'rejected global over-capacity reads cannot launch subprocesses',
+  );
+  assert.equal(attempts[8].adapter.activeCount(), 0);
+  assert.equal(attempts[9].adapter.activeCount(), 0);
+  assert.deepEqual(
+    await Promise.all(attempts.map(({ outcome }) => outcome)),
+    Array(10).fill('unavailable'),
+  );
+  for (let i = 0; i < 60 &&
+       attempts.some(({ adapter }) => adapter.activeCount()); i++) {
+    await delay(20);
+  }
+  assert.equal(
+    attempts.reduce((sum, { adapter }) => sum + adapter.activeCount(), 0), 0,
+    'all child-close leases must be released after timeout',
+  );
+  const recovered = owner('ok', { deadlineMs: 800 });
+  assert.equal((await read(harness(recovered))).ok, true,
+    'new isolated healthy owner must be admitted after dead children close');
+});
