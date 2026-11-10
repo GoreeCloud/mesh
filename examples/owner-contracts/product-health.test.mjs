@@ -41,7 +41,7 @@ for (const item of products) {
     assert.match(item.contract.source_blob, /^[a-f0-9]{40}$/);
     const inspected = {
       dav: '6a270d95c406def94482a9a4c6e9006c016a1e51',
-      tasks: '12dc998bdc303e6efab7e896f384041563115977',
+      tasks: 'd3b0b1a554608f53afcd50ae5641295d17b564e0',
       memos: '4a607701787a7ef6791d5a5dbf600938ecb3a4ed',
       'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
     };
@@ -149,6 +149,33 @@ test('Tasks fixture rejects even a well-formed private task list on the fixed he
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'unavailable');
   assert.equal(JSON.stringify(result).includes('private-task-fixture'), false);
+});
+
+test('Tasks health fixture rejects authenticated bootstrap page content without echoing titles', async () => {
+  const item = products.find(p => p.owner === 'tasks');
+  const bootstrapBody = JSON.stringify({
+    schemaVersion: 1,
+    tasks: [{ id: '00000000-0000-4000-8000-000000000000', title: 'secret-bootstrap-title' }],
+    checkpoint: 77,
+    nextAfter: '00000000-0000-4000-8000-000000000000',
+    hasMore: true,
+    limit: 1,
+  });
+  let calls = 0;
+  const projection = await read(makeHarness(item, {
+    permit: () => true, clock: () => seenAt,
+    transport: async params => {
+      calls++;
+      assert.equal(params.method, 'GET');
+      assert.equal(params.path, '/healthz');
+      return reply(bootstrapBody);
+    },
+  }), item);
+  assert.equal(calls, 1);
+  assert.equal(projection.ok, false);
+  assert.equal(projection.error.code, 'unavailable');
+  assert.equal(JSON.stringify(projection).includes('secret-bootstrap-title'), false);
+  assert.equal(JSON.stringify(projection).includes('checkpoint'), false);
 });
 
 test('Workspace Teams health cannot be confused with Tasks, Memos or DAV health or private API data', async () => {
