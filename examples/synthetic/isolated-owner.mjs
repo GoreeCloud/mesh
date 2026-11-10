@@ -20,7 +20,14 @@ const LAUNCH_WINDOW_MS = 60_000;
 // unlimited-instance bypass of each instance's own maxConcurrent budget.
 // NOT an OS-wide cgroup limit, process manager, or production sandbox.
 const MAX_GLOBAL_CHILDREN = 8;
+const MAX_GLOBAL_LAUNCHES_PER_WINDOW = 64;
 let globalActive = 0;
+const globalStarts = [];
+const pruneGlobalStarts = now => {
+  while (globalStarts.length && now - globalStarts[0] >= LAUNCH_WINDOW_MS) {
+    globalStarts.shift();
+  }
+};
 
 function fields(value, expected) {
   try {
@@ -132,8 +139,11 @@ export function createIsolatedSyntheticOwner(options) {
       // crash loop as soon as each child closes; use monotonic time only.
       const now = performance.now();
       pruneStarts(now);
-      if (starts.length >= MAX_LAUNCHES_PER_WINDOW) throw unavailable();
+      pruneGlobalStarts(now);
+      if (starts.length >= MAX_LAUNCHES_PER_WINDOW ||
+          globalStarts.length >= MAX_GLOBAL_LAUNCHES_PER_WINDOW) throw unavailable();
       starts.push(now);
+      globalStarts.push(now);
       // One child = one read; admission is held until actual child CLOSE,
       // even if the caller times out or aborts first.
       active += 1;
