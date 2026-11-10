@@ -29,11 +29,15 @@ function unavailable() { return new Error('source health unavailable'); }
  */
 export function createExactHealthFixtureAdapter(options, contract) {
   const fields = snapshot(options, ['transport', 'permit', 'clock'], ['transport']);
-  const source = snapshot(contract, ['path', 'body']);
+  const source = snapshot(contract, ['path', 'body', 'contentType']);
+  // Defaults preserve existing owner contracts. DAV's PHP handler explicitly
+  // sends application/json without a charset parameter; do not normalize it.
+  const expectedContentType = source?.contentType ?? 'application/json; charset=utf-8';
   if (!fields || !source || typeof fields.transport !== 'function' ||
       (own(fields, 'permit') && typeof fields.permit !== 'function') ||
       (own(fields, 'clock') && typeof fields.clock !== 'function') ||
       !['/healthz', '/api/v1/health', '/api/health'].includes(source.path) ||
+      !['application/json', 'application/json; charset=utf-8'].includes(expectedContentType) ||
       typeof source.body !== 'string' || source.body.length > 128 ||
       Buffer.byteLength(source.body, 'utf8') > 128) {
     throw new TypeError('invalid owner health fixture options');
@@ -62,7 +66,7 @@ export function createExactHealthFixtureAdapter(options, contract) {
       if (signal?.aborted) throw unavailable();
       const result = snapshot(response, ['status', 'contentType', 'body']);
       if (!result || result.status !== 200 ||
-          result.contentType !== 'application/json; charset=utf-8' ||
+          result.contentType !== expectedContentType ||
           typeof result.body !== 'string' || result.body.length > 128 ||
           Buffer.byteLength(result.body, 'utf8') > 128 || result.body !== body) {
         throw unavailable();
