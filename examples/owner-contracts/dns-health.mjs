@@ -41,8 +41,8 @@ function snapshot(value, allowed, required = allowed) {
 // this rejects duplicate keys and Unicode key aliases rather than overwriting
 // one spelling of a field. The server name is checked but NEVER projected.
 const NAME = String.raw`[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?`;
-const FIRST = new RegExp(String.raw`^\\s*\\{\\s*"server"\\s*:\\s*"(${NAME})"\\s*,\\s*"status"\\s*:\\s*"ok"\\s*\\}\\s*$`);
-const SECOND = new RegExp(String.raw`^\\s*\\{\\s*"status"\\s*:\\s*"ok"\\s*,\\s*"server"\\s*:\\s*"(${NAME})"\\s*\\}\\s*$`);
+const FIRST = new RegExp(String.raw`^\s*\{\s*"server"\s*:\s*"(${NAME})"\s*,\s*"status"\s*:\s*"ok"\s*\}\s*$`);
+const SECOND = new RegExp(String.raw`^\s*\{\s*"status"\s*:\s*"ok"\s*,\s*"server"\s*:\s*"(${NAME})"\s*\}\s*$`);
 function validBody(body) {
   if (typeof body !== 'string' || body.length > 512 ||
       Buffer.byteLength(body, 'utf8') > 512) return false;
