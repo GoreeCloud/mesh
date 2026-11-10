@@ -44,6 +44,12 @@ export function createIsolatedSyntheticOwner(options) {
   const permit = c.permit;
   const deadlineMs = c.deadlineMs;
   const maxConcurrent = c.maxConcurrent;
+  // A direct owner read must consume exactly one prior successful authorization.
+  // Weak keys do not retain abandoned/aborted request signals indefinitely.
+  const authorizedSignals = new WeakSet();
+  // Version each authorization attempt so a later denial or recheck revokes
+  // any older pending allow, even when its policy callback resolves late.
+  const authorizationVersions = new WeakMap();
   let active = 0;
   const starts = [];
   const pruneStarts = now => {
@@ -63,10 +69,18 @@ export function createIsolatedSyntheticOwner(options) {
     async authorize(actor, capability, context = {}) {
       const signal = safeSignal(context);
       if (!signal) return false;
+      // Every newer authorization attempt invalidates an older granted or
+      // still-pending ticket, including when policy callbacks resolve out of order.
+      const version = (authorizationVersions.get(signal) || 0) + 1;
+      authorizationVersions.set(signal, version);
+      authorizedSignals.delete(signal);
       try {
         if (signal.aborted) return false;
         const allowed = (await permit(actor, capability, { signal })) === true;
-        return allowed && !signal.aborted;
+        if (!allowed || signal.aborted ||
+            authorizationVersions.get(signal) !== version) return false;
+        authorizedSignals.add(signal);
+        return true;
       } catch { return false; }
     },
     activeCount() { return active; },
@@ -77,7 +91,8 @@ export function createIsolatedSyntheticOwner(options) {
     async readStatus(context = {}) {
       const signal = safeSignal(context);
       try {
-        if (!signal || signal.aborted || active >= maxConcurrent) {
+        if (!signal || !authorizedSignals.delete(signal) ||
+            signal.aborted || active >= maxConcurrent) {
           throw unavailable();
         }
       } catch {
