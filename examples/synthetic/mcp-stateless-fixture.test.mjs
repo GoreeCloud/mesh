@@ -603,3 +603,79 @@ test('timed-out per-actor work keeps its admission until real owner settlement',
   assert.equal(after.result.content[0].text,'alpha');
   assert.equal(calls,3,'Settled owner work frees this actor’s admission slot');
 });
+
+test('optional per-actor call window denies rapid sequential reads without blocking other actors',async()=>{
+  const called=[];
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(_name,_args,host){called.push(host.actor);return {content:[{type:'text',text:'ok'}]};},
+  },{isAuthenticated:ctx=>ctx.authenticated===true,
+    maxConcurrentCalls:3,maxCallsPerActorWindow:2,actorWindowMs:100});
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const read=actor=>server.dispatch(method,{authenticated:true,actor});
+  assert.equal((await read('fixture.alpha')).result.isError,false);
+  assert.equal((await read('fixture.alpha')).result.isError,false);
+  const saturated=await read('fixture.alpha');
+  assert.equal(saturated.error.code,-32000);
+  assert.equal(saturated.error.message,'Capability unavailable');
+  assert.equal((await read('fixture.beta')).result.isError,false,
+    'A noisy actor must not suppress an independent trusted actor');
+  assert.deepEqual(called,['fixture.alpha','fixture.alpha','fixture.beta']);
+  await new Promise(resolve=>setTimeout(resolve,130));
+  assert.equal((await read('fixture.alpha')).result.isError,false);
+  assert.equal(called.length,4,'Expired fixed window must recover');
+});
+
+test('actor window quota is keyed to trusted identity and configuration rejects unsafe bounds',async()=>{
+  let executed=0;
+  const bridge={
+    listTools(){return[];},
+    callTool(){executed++;return {content:[{type:'text',text:'synthetic'}]};},
+  };
+  const accepted={isAuthenticated:()=>true,maxConcurrentCalls:2,
+    maxCallsPerActorWindow:1,actorWindowMs:1000};
+  const server=createSyntheticStatelessMcpDispatcher(bridge,accepted);
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  for(const context of [{authenticated:true},{authenticated:true,actor:''},
+    {authenticated:true,actor:'bad/actor'},{authenticated:true,actor:'x'.repeat(129)}]) {
+    assert.equal((await server.dispatch(method,context)).error.code,-32000);
+  }
+  method.params._meta['io.modelcontextprotocol/clientInfo']={
+    name:'pretend.fixture.beta',version:'0.0.1',
+  };
+  assert.equal((await server.dispatch(method,{authenticated:true,actor:'fixture.alpha'})).result.isError,false);
+  assert.equal((await server.dispatch(method,{authenticated:true,actor:'fixture.alpha'})).error.code,-32000);
+  assert.equal((await server.dispatch(method,{authenticated:true,actor:'fixture.beta'})).result.isError,false);
+  assert.equal(executed,2);
+  for(const options of [
+    {...accepted,maxCallsPerActorWindow:0}, {...accepted,maxCallsPerActorWindow:65},
+    {...accepted,maxCallsPerActorWindow:1.2}, {...accepted,maxCallsPerActorWindow:NaN},
+    {...accepted,maxCallsPerActorWindow:'1'}, {...accepted,actorWindowMs:0},
+    {...accepted,actorWindowMs:99},{...accepted,actorWindowMs:60001},
+    {...accepted,actorWindowMs:1.5},
+    {isAuthenticated:()=>true,actorWindowMs:1000},
+  ])assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,options),RangeError);
+});
+
+test('actor window ledger bounds identity cardinality and denies additional keys fail closed',async()=>{
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(){return {content:[{type:'text',text:'ok'}]};},
+  },{isAuthenticated:()=>true,maxConcurrentCalls:1,
+     maxCallsPerActorWindow:1,actorWindowMs:60000});
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  for(let i=0;i<128;i++) {
+    const r=await server.dispatch(method,{actor:'fixture.actor-'+i});
+    assert.equal(r.result.isError,false,'Bounded actor '+i+' should admit once');
+  }
+  const denied=await server.dispatch(method,{actor:'fixture.actor-128'});
+  assert.equal(denied.error.code,-32000);
+  const repeated=await server.dispatch(method,{actor:'fixture.actor-0'});
+  assert.equal(repeated.error.code,-32000);
+});
