@@ -50,6 +50,56 @@ function validMeta(raw) {
   return true;
 }
 
+// Tool metadata crosses into the client-visible JSON-RPC result. Treat an
+// injected bridge's output as untrusted even when the bridge itself was wired
+// by a host. Snapshot only a fixed, read-only synthetic schema.
+function safeToolCatalog(raw) {
+  try {
+    if (!Array.isArray(raw) || raw.length > 32) return null;
+    const members = Object.getOwnPropertyDescriptors(raw);
+    const keys = Reflect.ownKeys(raw);
+    if (keys.some(key => key !== 'length' &&
+        (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
+         Number(key) >= raw.length))) return null;
+    const tools = [];
+    const names = new Set();
+    for (let i = 0; i < raw.length; i++) {
+      const slot = members[String(i)];
+      if (!slot || !Object.prototype.hasOwnProperty.call(slot, 'value')) return null;
+      const data = record(slot.value,
+        ['name', 'title', 'description', 'inputSchema', 'annotations'],
+        ['name', 'title', 'description', 'inputSchema', 'annotations']);
+      if (!data || typeof data.name !== 'string' ||
+          !/^mesh__[a-z][a-z0-9_-]{1,63}__status_read$/.test(data.name) ||
+          names.has(data.name) ||
+          typeof data.title !== 'string' || data.title.length < 1 ||
+          data.title.length > 80 ||
+          typeof data.description !== 'string' || data.description.length < 1 ||
+          data.description.length > 250) return null;
+      const schema = record(data.inputSchema,
+        ['type', 'properties', 'additionalProperties'],
+        ['type', 'properties', 'additionalProperties']);
+      const hints = record(data.annotations,
+        ['readOnlyHint', 'destructiveHint', 'openWorldHint'],
+        ['readOnlyHint', 'destructiveHint', 'openWorldHint']);
+      if (!schema || schema.type !== 'object' ||
+          !record(schema.properties, []) ||
+          schema.additionalProperties !== false ||
+          !hints || hints.readOnlyHint !== true ||
+          hints.destructiveHint !== false || hints.openWorldHint !== false) return null;
+      names.add(data.name);
+      tools.push({
+        name: data.name, title: data.title, description: data.description,
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      });
+    }
+    return tools;
+  } catch {
+    return null;
+  }
+}
+
 /** Host must supply a previously authenticated context and independent permit. */
 export function createSyntheticStatelessMcpDispatcher(bridge, {
   isAuthenticated, maxConcurrentCalls = 4, callTimeoutMs = 2000,
@@ -98,7 +148,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, {
         }
         if (rpc.method === 'tools/list') {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
-          return reply(rpc.id, { resultType: 'complete', tools: bridge.listTools() });
+          const tools = safeToolCatalog(bridge.listTools());
+          if (!tools) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          return reply(rpc.id, { resultType: 'complete', tools });
         }
         if (rpc.method === 'tools/call') {
           if (!Object.prototype.hasOwnProperty.call(params, 'name') ||

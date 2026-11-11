@@ -202,3 +202,78 @@ test('rejected asynchronous host authentication is refused without unhandled own
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(calls,0);
 });
+
+
+test('synthetic tool-list boundary copies only fixed read-only metadata', async () => {
+  const source = {
+    name:'mesh__example_health__status_read',
+    title:'Synthetic status fixture',
+    description:'Local-only status; no live service',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
+  };
+  const bridge = { listTools:()=>[source], async callTool(){throw Error('not used')} };
+  const server = createSyntheticStatelessMcpDispatcher(bridge,{isAuthenticated:()=>true});
+  const got = await server.dispatch(request('tools/list'),authorized);
+  assert.equal(got.result.tools.length,1);
+  assert.deepEqual(got.result.tools[0],source);
+  assert.notEqual(got.result.tools[0],source);
+  assert.notEqual(got.result.tools[0].annotations,source.annotations);
+  assert.notEqual(got.result.tools[0].inputSchema,source.inputSchema);
+  source.annotations.readOnlyHint = false;
+  source.title = 'Private new title';
+  assert.equal(got.result.tools[0].annotations.readOnlyHint,true);
+  assert.equal(got.result.tools[0].title,'Synthetic status fixture');
+});
+
+test('synthetic tool-list boundary fails closed for hostile descriptors and unsafe catalogs', async () => {
+  let getterCalls = 0;
+  const valid = () => ({
+    name:'mesh__example_health__status_read',
+    title:'Synthetic status fixture',
+    description:'Local-only status; no live service',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
+  });
+  const accessor = Object.defineProperty(valid(),'name',{
+    get(){getterCalls++;throw new Error('private-accessor')},
+  });
+  const arrayGetter = [];
+  Object.defineProperty(arrayGetter,'0',{
+    get(){getterCalls++;throw new Error('private-index')},
+    enumerable:true,
+  });
+  arrayGetter.length = 1;
+  const hostile = new Proxy([], {ownKeys(){throw new Error('private-proxy')}});
+  for (const output of [
+    null, 42, {}, [accessor], arrayGetter, hostile, new Array(1),
+    [valid(),valid()],
+    Array.from({length:33},valid),
+    [{...valid(),secret:'hidden-admin-token'}],
+    [{...valid(),description:'x'.repeat(300)}],
+    [{...valid(),name:'mesh__secrets__write'}],
+    [{...valid(),inputSchema:{type:'object',properties:{actor:{}},additionalProperties:false}}],
+    [{...valid(),annotations:{...valid().annotations,readOnlyHint:false}}],
+    [{...valid(),annotations:{...valid().annotations,openWorldHint:true}}],
+    [{...valid(),annotations:{...valid().annotations,privateKey:'secret'}}],
+  ]) {
+    const server = createSyntheticStatelessMcpDispatcher({
+      listTools(){return output},async callTool(){throw new Error('must-not-run')},
+    },{isAuthenticated:()=>true});
+    const result = await server.dispatch(request('tools/list'),authorized);
+    assert.equal(result.error.code,-32000,'Unexpected tool catalog accepted');
+    assert.doesNotMatch(JSON.stringify(result),/private|token|secret|accessor/);
+  }
+  assert.equal(getterCalls,0,'No accessor from untrusted catalog may execute');
+});
+
+test('tool inventory is not visible to an unauthenticated caller even when its getter would throw',async()=>{
+  let reads=0;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){ reads++; throw Error('private source inventory'); },
+    async callTool(){throw Error('must-not-run')},
+  },{isAuthenticated:()=>false});
+  const reply=await server.dispatch(request('tools/list'),anonymous);
+  assert.equal(reply.error.code,-32000);
+  assert.equal(reads,0);
+});
