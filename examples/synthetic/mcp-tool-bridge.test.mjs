@@ -11,7 +11,7 @@ function source() {
     async read(request) {
       events.push(request);
       return request.actor === 'fixture.reader'
-        ? { ok: true, kind: 'synthetic_result', evidence_status: 'prototype', data: { state: 'ok', observed_at: '2026-11-11T00:00:00.000Z' } }
+        ? { ok: true, kind: 'synthetic_result', capabilityId: request.capabilityId, evidence_status: 'prototype', data: { state: 'ok', observed_at: '2026-11-11T00:00:00.000Z' } }
         : { ok: false, error: { code: 'denied' } };
     },
   };
@@ -139,4 +139,60 @@ test('mistaken asynchronous host actor resolver is denied and rejection consumed
   const denied=await resolved.callTool(name,{}, {authenticatedActor:'fixture.reader'});
   assert.equal(denied.isError,true,'Even resolved async identities are never authoritative');
   assert.equal(events.length,0);
+});
+
+test('owner status projection rejects accessor-backed and mismatched capability output',async()=>{
+  const valid={
+    ok:true,kind:'synthetic_result',capabilityId:'fixture.alpha.status',
+    evidence_status:'prototype',
+    data:{state:'ok',observed_at:'2026-11-11T00:00:00.000Z'},
+  };
+  let evaluated=0;
+  const badOuter=Object.defineProperty({...valid},'data',{
+    enumerable:true,get(){evaluated++;throw Error('private owner property');},
+  });
+  const badInner=Object.defineProperty({...valid.data},'observed_at',{
+    enumerable:true,get(){evaluated++;return '2026-11-11T00:00:00.000Z';},
+  });
+  const hostileStatus=new Proxy({state:'ok',observed_at:'2026-11-11T00:00:00.000Z'},{
+    ownKeys(){throw Error('private proxy trap');},
+  });
+  const cases=[
+    badOuter,{...valid,data:badInner},{...valid,data:hostileStatus},
+    {...valid,capabilityId:'fixture.beta.status'},
+    {...valid,private_owner_token:'secret'},
+    {...valid,data:{...valid.data,secret:'owner-private'}},
+    {...valid,data:{state:'ok',observed_at:'2026-02-30T00:00:00.000Z'}},
+    {...valid,data:{state:'ok',observed_at:'x'.repeat(5000)}},
+  ];
+  for (const candidate of cases) {
+    const {harness}=source();
+    harness.read=async()=>candidate;
+    const bridge=createSyntheticMcpToolBridge(harness,{resolveActor:getActor});
+    const response=await bridge.callTool(bridge.listTools()[0].name,{},
+      {authenticatedActor:'fixture.reader'});
+    assert.equal(response.isError,true,'Malformed owner output must be denied');
+    assert.equal(response.content[0].text,'Capability unavailable.');
+    assert.doesNotMatch(JSON.stringify(response),/private|secret|owner-private/);
+  }
+  assert.equal(evaluated,0,'No untrusted owner getters should execute');
+});
+
+test('owner result requires verified capability identity and canonical UTC timestamp',async()=>{
+  const {harness}=source();
+  let reading;
+  harness.read=async()=>reading;
+  const bridge=createSyntheticMcpToolBridge(harness,{resolveActor:getActor});
+  const tool=bridge.listTools()[0].name;
+  reading={ok:true,kind:'synthetic_result',
+    capabilityId:'fixture.alpha.status',evidence_status:'prototype',
+    data:{state:'degraded',observed_at:'2026-11-11T00:00:00.000Z'}};
+  const accepted=await bridge.callTool(tool,{}, {authenticatedActor:'fixture.reader'});
+  assert.equal(accepted.isError,undefined);
+  assert.deepEqual(JSON.parse(accepted.content[0].text),{
+    evidence_status:'prototype',environment:'synthetic-local-only',
+    state:'degraded',observed_at:'2026-11-11T00:00:00.000Z',
+  });
+  reading={...reading,capabilityId:undefined};
+  assert.equal((await bridge.callTool(tool,{}, {authenticatedActor:'fixture.reader'})).isError,true);
 });
