@@ -39,6 +39,12 @@ The wrapper records completion order, not invocation order. It refuses an excess
 
 Validation: `npm test` includes `evidence.test.mjs` alongside the existing synthetic contract tests. Live Identity, GoreeShield, Wardveil, production telemetry, durable delivery and real adapters remain unimplemented.
 
+## Controlled synthetic owner shutdown (development only)
+
+The fixed-code subprocess adapter now exposes an idempotent `shutdown()` method. Once invoked, the adapter denies new authorizations and reads, invalidates late resolutions of previously pending owner-policy callbacks, and signals all currently tracked child leases to terminate. Their in-flight capacity remains charged until the operating system emits each child `close` event; shutdown completion is not evidence that child processes already exited. Existing POSIX process-group cleanup also covers the fixture's deliberately attached descendants. This is useful to test application teardown and avoid orphaned synthetic operations in this one Node process.
+
+This is not an automatic restart supervisor or a durable cancellation/cleanup acknowledgment API. It does not kill arbitrary code outside the trusted fixed-code worker group, enforce OS security isolation, revoke production credentials, or provide backup and recovery. No production connector or service uses this fixture.
+
 ## POSIX fixed-code process-group cleanup (development test)
 
 When an isolated synthetic owner launches on POSIX, the fixed-code child now starts in its own process group. A deadline or caller abort sends SIGKILL to that owned group, rather than only to the immediate child, so a deliberately spawned fixed-code descendant cannot keep inherited stdout open and pin the capacity slot indefinitely. A dedicated `tree-hang` regression creates one synthetic descendant and verifies that both timeout and abort eventually reach the actual child `close` event, where the admission slot is released. Windows retains its existing immediate-child termination behavior and rejects the POSIX-only regression mode.
