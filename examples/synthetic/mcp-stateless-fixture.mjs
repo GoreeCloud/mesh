@@ -55,15 +55,18 @@ function validMeta(raw) {
 // by a host. Snapshot only a fixed, read-only synthetic schema.
 function safeToolCatalog(raw) {
   try {
-    if (!Array.isArray(raw) || raw.length > 32) return null;
+    if (!Array.isArray(raw) || Object.getPrototypeOf(raw) !== Array.prototype) return null;
     const members = Object.getOwnPropertyDescriptors(raw);
+    const size = members.length?.value;
+    if (!Number.isInteger(size) || size > 32) return null;
     const keys = Reflect.ownKeys(raw);
+    if (keys.length !== size + 1) return null;
     if (keys.some(key => key !== 'length' &&
         (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) ||
-         Number(key) >= raw.length))) return null;
+         Number(key) >= size))) return null;
     const tools = [];
     const names = new Set();
-    for (let i = 0; i < raw.length; i++) {
+    for (let i = 0; i < size; i++) {
       const slot = members[String(i)];
       if (!slot || !Object.prototype.hasOwnProperty.call(slot, 'value')) return null;
       const data = record(slot.value,
@@ -101,13 +104,22 @@ function safeToolCatalog(raw) {
 }
 
 /** Host must supply a previously authenticated context and independent permit. */
-export function createSyntheticStatelessMcpDispatcher(bridge, {
-  isAuthenticated, maxConcurrentCalls = 4, callTimeoutMs = 2000,
-} = {}) {
-  if (!bridge || typeof bridge.listTools !== 'function' || typeof bridge.callTool !== 'function' ||
-      typeof isAuthenticated !== 'function') {
+export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
+  // The host registration is a security boundary: do not evaluate getters,
+  // accept unexpected configuration, or permit callback replacement midflight.
+  const methods = record(bridge, ['listTools', 'callTool'], ['listTools', 'callTool']);
+  const settings = record(options, ['isAuthenticated', 'maxConcurrentCalls', 'callTimeoutMs'],
+    ['isAuthenticated']);
+  if (!methods || !settings || typeof methods.listTools !== 'function' ||
+      typeof methods.callTool !== 'function' ||
+      typeof settings.isAuthenticated !== 'function') {
     throw new TypeError('Synthetic bridge and trusted authentication check required');
   }
+  const { isAuthenticated } = settings;
+  const maxConcurrentCalls = settings.maxConcurrentCalls === undefined ? 4 : settings.maxConcurrentCalls;
+  const callTimeoutMs = settings.callTimeoutMs === undefined ? 2000 : settings.callTimeoutMs;
+  const listTools = methods.listTools;
+  const callTool = methods.callTool;
   if (!Number.isInteger(maxConcurrentCalls) || maxConcurrentCalls < 1 || maxConcurrentCalls > 16 ||
       !Number.isInteger(callTimeoutMs) || callTimeoutMs < 1 || callTimeoutMs > 30000) {
     throw new RangeError('Invalid synthetic MCP admission limits');
@@ -148,7 +160,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, {
         }
         if (rpc.method === 'tools/list') {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
-          const tools = safeToolCatalog(bridge.listTools());
+          const tools = safeToolCatalog(Reflect.apply(listTools, bridge, []));
           if (!tools) return rpcError(rpc.id, -32000, 'Capability unavailable');
           return reply(rpc.id, { resultType: 'complete', tools });
         }
@@ -168,7 +180,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, {
           // Catch owner failures, and hold admission until work REALLY settles.
           // Promise.race limits the waiting caller, not the untrusted execution.
           const operation = Promise.resolve()
-            .then(() => bridge.callTool(params.name, params.arguments ?? {}, trustedContext))
+            .then(() => Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, trustedContext]))
             .catch(() => null)
             .finally(() => { inFlight -= 1; });
           let timer;
