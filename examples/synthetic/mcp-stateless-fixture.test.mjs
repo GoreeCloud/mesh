@@ -510,3 +510,96 @@ test('synthetic MCP output enforces UTF-8 bytes, not JavaScript code units',asyn
   assert.equal(astral.error.code,-32000);
   assert.equal(JSON.stringify(astral).includes('🙂'),false);
 });
+
+test('synthetic per-actor admission prevents noisy principal from monopolizing global pool',async()=>{
+  const releases=new Map(),calls=[];
+  let block=true;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(_name,_arguments,host){
+      calls.push(host.actor);
+      if (!block) return {content:[{type:'text',text:'completed'}]};
+      return new Promise(resolve=>releases.set(host.actor,resolve));
+    },
+  },{isAuthenticated:host=>host.authenticated===true,
+     maxConcurrentCalls:2,maxConcurrentPerActor:1,callTimeoutMs:1000});
+  const method=()=>request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const actor=name=>({authenticated:true,actor:name});
+  const alpha=server.dispatch(method(),actor('fixture.alpha'));
+  await Promise.resolve();await Promise.resolve();
+  const duplicate=await server.dispatch(method(),actor('fixture.alpha'));
+  assert.equal(duplicate.error.code,-32000);
+  const beta=server.dispatch(method(),actor('fixture.beta'));
+  await Promise.resolve();await Promise.resolve();
+  assert.deepEqual(calls,['fixture.alpha','fixture.beta']);
+  const saturated=await server.dispatch(method(),actor('fixture.gamma'));
+  assert.equal(saturated.error.code,-32000,'Global cap still applies across actors');
+  block=false;
+  releases.get('fixture.alpha')({content:[{type:'text',text:'alpha'}]});
+  releases.get('fixture.beta')({content:[{type:'text',text:'beta'}]});
+  assert.equal((await alpha).result.content[0].text,'alpha');
+  assert.equal((await beta).result.content[0].text,'beta');
+  const recovered=await server.dispatch(method(),actor('fixture.alpha'));
+  assert.equal(recovered.result.content[0].text,'completed');
+  assert.deepEqual(calls,['fixture.alpha','fixture.beta','fixture.alpha']);
+});
+
+test('per-actor fairness refuses missing or invalid trusted keys, not model client claims',async()=>{
+  let calls=0;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(){calls++;return {content:[{type:'text',text:'ok'}]};},
+  },{isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerActor:1});
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  for(const host of [{authenticated:true},{authenticated:true,actor:''},
+    {authenticated:true,actor:'x'.repeat(129)},{authenticated:true,actor:'bad/actor'}]){
+    const response=await server.dispatch(method,host);
+    assert.equal(response.error.code,-32000);
+  }
+  method.params._meta['io.modelcontextprotocol/clientInfo']={
+    name:'pretend-to-be-other-actor',version:'0.0.1',
+  };
+  const admitted=await server.dispatch(method,{authenticated:true,actor:'fixture.alpha'});
+  assert.equal(admitted.result.isError,false);
+  assert.equal(calls,1,'Client-supplied metadata never authorizes a missing host actor');
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},callTool(){},
+  },{isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerActor:3}),RangeError);
+  for(const invalid of [0,-1,1.25,NaN,'1']){
+    assert.throws(()=>createSyntheticStatelessMcpDispatcher({
+      listTools(){return[];},callTool(){},
+    },{isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerActor:invalid}),RangeError);
+  }
+});
+
+test('timed-out per-actor work keeps its admission until real owner settlement',async()=>{
+  let release, calls=0;
+  const waiting=new Promise(resolve=>{release=resolve;});
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(_name,_arguments,host){
+      calls++;
+      return host.actor==='fixture.alpha'?waiting:{content:[{type:'text',text:'beta'}]};
+    },
+  },{isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerActor:1,callTimeoutMs:20});
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const alpha={authenticated:true,actor:'fixture.alpha'};
+  const expired=await server.dispatch(method,alpha);
+  assert.equal(expired.error.code,-32000);
+  const stillBlocked=await server.dispatch(method,alpha);
+  assert.equal(stillBlocked.error.code,-32000);
+  const beta=await server.dispatch(method,{authenticated:true,actor:'fixture.beta'});
+  assert.equal(beta.result.content[0].text,'beta');
+  assert.equal(calls,2,'A timed-out actor cannot start duplicate work while others continue');
+  release({content:[{type:'text',text:'alpha'}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  const after=await server.dispatch(method,alpha);
+  assert.equal(after.result.content[0].text,'alpha');
+  assert.equal(calls,3,'Settled owner work frees this actor’s admission slot');
+});
