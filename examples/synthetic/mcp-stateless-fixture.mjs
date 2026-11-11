@@ -75,7 +75,15 @@ export function createSyntheticStatelessMcpDispatcher(bridge, {
       if (!params || !validMeta(params._meta)) return rpcError(rpc.id, -32602, 'Invalid params');
       // The protocol envelope's client identity is explicitly NOT authentication.
       let authenticated = false;
-      try { authenticated = isAuthenticated(trustedContext) === true; } catch { /* default deny */ }
+      try {
+        const decision = isAuthenticated(trustedContext);
+        if (decision && typeof decision.then === 'function') {
+          // Asynchronous decisions do not confer permissions. Consume eventual
+          // rejection so a mistaken host callback cannot crash the process.
+          Promise.resolve(decision).catch(() => {});
+        }
+        authenticated = decision === true;
+      } catch { /* default deny */ }
       if (!authenticated) return rpcError(rpc.id, -32000, 'Capability unavailable');
       try {
         if (rpc.method === 'server/discover') {
