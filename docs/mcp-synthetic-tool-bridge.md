@@ -30,3 +30,7 @@ authentication, authorization, or client certification.
 ## Synchronous synthetic actor resolution
 
 A trusted host must supply a synchronous resolver returning a string actor. If the callback accidentally returns a Promise or thenable, the bridge denies the read without running the owner and consumes eventual rejection so the fixture process is not interrupted by an unhandled rejection. This is a fail-closed local fixture behavior, not authentication or a production identity lifecycle.
+
+## Capability-bound owner result projection
+
+Direct synthetic bridge calls now accept success only when the owner response has exactly the expected inert own-data fields, including the same `capabilityId` requested by Mesh and a canonical UTC ISO observation timestamp. Nested status objects must contain only the bounded `state` and `observed_at` properties; accessor-backed values, proxies that fail inspection, extra fields, mismatched identities, malformed timestamps and oversized status strings fail closed with the fixed generic error. The trusted source harness already produces this exact output shape. This prevents accidental projection of hostile fixture owner objects; it does **not** implement a production transport, authenticated Identity principal, GoreeShield consent, Wardveil deployment control or verified client interoperability.
