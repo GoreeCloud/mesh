@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import {CALENDAR_VTODO_PREFLIGHT_CONTRACT as CONTRACT,
   parseCalendarTaskImportability as parse} from './calendar-vtodo-preflight.mjs';
 
-if (process.env.GC_MESH_CALENDAR_PREVIEW_FIXTURE !== '1' || process.argv.length !== 3) {
+if (process.env.GC_MESH_CALENDAR_PREVIEW_FIXTURE !== '1' || process.argv.length !== 4) {
   throw Error('Explicit isolated Calendar fixture and source directory required');
 }
 const child = spawn('python3', [
@@ -59,13 +60,13 @@ try {
   assert.equal(listed.status,200);
   const calendarId=JSON.parse(listed.body).calendars[0].id;
   assert.ok(typeof calendarId==='string'&&calendarId.length>0);
-  const taskIcs=[
-    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//GoreeCloud Tasks//VTODO Preview//EN',
-    'BEGIN:VTODO','UID:urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    'DTSTAMP:20261111T120000Z','SEQUENCE:3','CLASS:PRIVATE',
-    'STATUS:NEEDS-ACTION','SUMMARY:SYNTHETIC_PRIVATE_TITLE_DO_NOT_ECHO',
-    'DUE;VALUE=DATE:20261112','END:VTODO','END:VCALENDAR',''
-  ].join('\r\n');
+  const taskIcs=readFileSync(path.resolve(process.argv[3]),'utf8');
+  assert.ok(Buffer.byteLength(taskIcs,'utf8')<=8192);
+  assert.ok(taskIcs.startsWith('BEGIN:VCALENDAR\r\n'));
+  for(const required of ['CLASS:PRIVATE\r\n','SEQUENCE:3\r\n',
+      'DUE;VALUE=DATE:20261112\r\n','SUMMARY:SYNTHETIC_PRIVATE_TITLE_DO_NOT_ECHO\r\n']){
+    assert.ok(taskIcs.includes(required),'Pinned Tasks exporter must emit required fixture property');
+  }
   const payload={calendar_id:calendarId,ics:taskIcs};
   assert.equal((await call(CONTRACT.path,'POST',payload)).status,401);
   assert.equal((await call(CONTRACT.path,'POST',payload,other)).status,404);
