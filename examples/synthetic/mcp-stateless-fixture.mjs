@@ -155,8 +155,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // The host registration is a security boundary: do not evaluate getters,
   // accept unexpected configuration, or permit callback replacement midflight.
   const methods = record(bridge, ['listTools', 'callTool'], ['listTools', 'callTool']);
-  const settings = record(options, ['isAuthenticated', 'maxConcurrentCalls', 'callTimeoutMs'],
-    ['isAuthenticated']);
+  const settings = record(options, [
+    'isAuthenticated', 'maxConcurrentCalls', 'maxConcurrentPerActor', 'callTimeoutMs',
+  ], ['isAuthenticated']);
   if (!methods || !settings || typeof methods.listTools !== 'function' ||
       typeof methods.callTool !== 'function' ||
       typeof settings.isAuthenticated !== 'function') {
@@ -164,16 +165,23 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   }
   const { isAuthenticated } = settings;
   const maxConcurrentCalls = settings.maxConcurrentCalls === undefined ? 4 : settings.maxConcurrentCalls;
+  // Optional local fairness constraint. A trusted host MUST bind actor to a
+  // verified principal; model-provided clientInfo never chooses a quota key.
+  const maxConcurrentPerActor = settings.maxConcurrentPerActor;
   const callTimeoutMs = settings.callTimeoutMs === undefined ? 2000 : settings.callTimeoutMs;
   const listTools = methods.listTools;
   const callTool = methods.callTool;
   if (!Number.isInteger(maxConcurrentCalls) || maxConcurrentCalls < 1 || maxConcurrentCalls > 16 ||
+      (maxConcurrentPerActor !== undefined &&
+        (!Number.isInteger(maxConcurrentPerActor) || maxConcurrentPerActor < 1 ||
+         maxConcurrentPerActor > maxConcurrentCalls)) ||
       !Number.isInteger(callTimeoutMs) || callTimeoutMs < 1 || callTimeoutMs > 30000) {
     throw new RangeError('Invalid synthetic MCP admission limits');
   }
   // A timed-out caller never frees a worker slot. Only the actual owner
   // promise settling can do so, preventing runaway work after a timeout.
   let inFlight = 0;
+  const byActor = new Map(); // bounded by global admitted workers, not remote claims
   return Object.freeze({
     async dispatch(envelope, trustedContext) {
       const rpc = record(envelope, ['jsonrpc', 'id', 'method', 'params'],
@@ -224,16 +232,36 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // Model arguments are never copied into trustedContext.
           if (Object.prototype.hasOwnProperty.call(params, 'arguments') &&
               !record(params.arguments, [])) return rpcError(rpc.id, -32602, 'Invalid params');
-          if (inFlight >= maxConcurrentCalls) {
+          // When per-actor fairness is enabled, reject principals without a
+          // bounded host-authenticated key instead of pooling them as "guest".
+          const actor = maxConcurrentPerActor === undefined ? null : host.actor;
+          if (maxConcurrentPerActor !== undefined &&
+              (typeof actor !== 'string' ||
+               !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(actor))) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
+          if (inFlight >= maxConcurrentCalls ||
+              (maxConcurrentPerActor !== undefined &&
+               (byActor.get(actor) ?? 0) >= maxConcurrentPerActor)) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
           }
           inFlight += 1;
-          // Catch owner failures, and hold admission until work REALLY settles.
-          // Promise.race limits the waiting caller, not the untrusted execution.
+          if (maxConcurrentPerActor !== undefined) {
+            byActor.set(actor, (byActor.get(actor) ?? 0) + 1);
+          }
+          // Timeout never frees global OR per-actor capacity until the owner
+          // promise settles. Delete idle actor entries to bound retained keys.
           const operation = Promise.resolve()
             .then(() => Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, host]))
             .catch(() => null)
-            .finally(() => { inFlight -= 1; });
+            .finally(() => {
+              inFlight -= 1;
+              if (maxConcurrentPerActor !== undefined) {
+                const remaining = (byActor.get(actor) ?? 1) - 1;
+                if (remaining === 0) byActor.delete(actor);
+                else byActor.set(actor, remaining);
+              }
+            });
           let timer;
           let result;
           try {
