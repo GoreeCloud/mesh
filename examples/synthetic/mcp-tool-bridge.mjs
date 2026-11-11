@@ -99,6 +99,13 @@ export function createSyntheticMcpToolBridge(harness, options = {}) {
         }
         // Only a trusted host supplies the context; no identity comes from args.
         const actor = resolveActor(trustedContext);
+        if (actor && typeof actor.then === 'function') {
+          // This host resolver must be synchronous. Deny a mistaken async
+          // callback and consume its eventual rejection to avoid crashing the
+          // fixture process with an unhandled promise rejection.
+          Promise.resolve(actor).catch(() => {});
+          return deny();
+        }
         if (typeof actor !== 'string') return deny();
         const result = await Reflect.apply(read, harness, [{ actor, capabilityId: map.get(name), operation: 'status.read' }]);
         if (result?.ok !== true || result.kind !== 'synthetic_result' ||
