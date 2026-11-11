@@ -25,6 +25,10 @@ The constructor snapshots exact own-data `listTools` and `callTool` methods and 
 
 After host authentication, `tools/list` now validates and snapshots a fixed maximum of 32 read-only status descriptors from the injected bridge. Only bounded name/title/description fields and empty-input schema with explicit `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false` are accepted. Duplicate tool names, unknown fields, accessor-backed data, sparse/oversized arrays, mutation-capable declarations and malformed catalog objects fail closed with a generic error. Returned descriptors are detached copies, not references into a host registry. This is **defense-in-depth for synthetic metadata**, not permission-aware production discovery; per-user tool visibility, durable audit, identity and consent enforcement are still missing.
 
+## Strict owner result projection
+
+After an admitted synthetic `tools/call`, the dispatcher also snapshots an exact own-data owner result with one plain-text content item and an optional boolean `isError`. Accessor fields, unexpected keys, noncanonical/sparse arrays, exotic content types and oversized text fail closed with a generic error. Tool result bodies are copied before returning to the client, so post-response owner mutation does not modify the captured reply. The owner remains responsible for its own redaction and authorization; this check cannot prove a returned string is non-sensitive.
+
 ## Security and compatibility boundary
 
 Do not expose this dispatcher to untrusted clients or deploy it behind HTTP/stdio. It has **no transport-level size limit**, content-type enforcement, OAuth bearer verification, workload identity, TLS, per-principal rate limiting, durable queuing, revocation, durable audit, per-tenant isolation, real-purpose/consent controls, noncooperative-owner termination or isolation, cancellation propagation, official SDK compatibility, or external-client interoperability tests. The in-process trustedContext parameter is a **trusted host injection boundary**, not a value read from JSON-RPC or a model. The mock boolean host gate only exercises test behavior.
