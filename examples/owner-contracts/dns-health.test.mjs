@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createSyntheticHarness, CONTRACT_VERSION } from '../synthetic/harness.mjs';
 import { createDNSHealthFixtureAdapter, DNS_HEALTH_CONTRACT } from './dns-health.mjs';
+import { createSyntheticMcpToolBridge } from '../synthetic/mcp-tool-bridge.mjs';
+import { createSyntheticStatelessMcpDispatcher, SYNTHETIC_MCP_VERSION } from '../synthetic/mcp-stateless-fixture.mjs';
 
 const PATH = '/api/dnsClient/healthCheck';
 const observed = '2026-11-10T17:00:00.000Z';
@@ -148,4 +150,55 @@ test('abort is fail-closed and cannot invoke an unexpected read', async () => {
   });
   assert.equal(await adapter.authorize('fixture.reader', {}, { signal: abort.signal }), false);
   await assert.rejects(adapter.readStatus({ signal: abort.signal }), /source health unavailable/);
+});
+
+
+test('source-pinned DNS synthetic status is discoverable through the modern Mesh MCP read-only bridge', async () => {
+  let transports = 0;
+  const delegate = harness({
+    permit: actor => actor === 'fixture.reader',
+    clock: () => observed,
+    transport: () => { transports++; return response(body); },
+  }, actor => actor === 'fixture.reader');
+  const tools = createSyntheticMcpToolBridge(delegate, {
+    resolveActor: context => context?.actor,
+  });
+  const server = createSyntheticStatelessMcpDispatcher(tools, {
+    isAuthenticated: context => context?.authenticated === true,
+    maxConcurrentCalls: 1, callTimeoutMs: 200,
+  });
+  const meta = {
+    'io.modelcontextprotocol/protocolVersion': SYNTHETIC_MCP_VERSION,
+    'io.modelcontextprotocol/clientCapabilities': {},
+  };
+  const rpc = (id, method, extra = {}) => ({
+    jsonrpc: '2.0', id, method, params: { _meta: meta, ...extra },
+  });
+  const authorized = { authenticated: true, actor: 'fixture.reader' };
+  const discovered = await server.dispatch(rpc(1, 'server/discover'), authorized);
+  assert.equal(discovered.result.resultType, 'complete');
+  const listed = await server.dispatch(rpc(2, 'tools/list'), authorized);
+  assert.deepEqual(listed.result.tools.map(tool => tool.name), ['mesh__dns_health__status_read']);
+  assert.equal(listed.result.tools[0].annotations.readOnlyHint, true);
+  const invoked = await server.dispatch(rpc(3, 'tools/call', {
+    name: 'mesh__dns_health__status_read', arguments: {},
+  }), authorized);
+  assert.equal(invoked.result.isError, false);
+  const projected = JSON.parse(invoked.result.content[0].text);
+  assert.equal(projected.environment, 'synthetic-local-only');
+  assert.equal(projected.state, 'ok');
+  assert.equal(projected.observed_at, observed);
+  assert.equal(JSON.stringify(invoked).includes('dns-lab'), false);
+  assert.equal(transports, 1);
+
+  const deniedOwner = await server.dispatch(rpc(4, 'tools/call', {
+    name: 'mesh__dns_health__status_read', arguments: {},
+  }), {authenticated:true,actor:'fixture.stranger'});
+  assert.equal(deniedOwner.result.isError, true);
+  assert.equal(deniedOwner.result.content[0].text, 'Capability unavailable.');
+  const deniedHost = await server.dispatch(rpc(5, 'tools/list'), {
+    authenticated:false,actor:'fixture.reader',
+  });
+  assert.equal(deniedHost.error.code, -32000);
+  assert.equal(transports, 1, 'No denied caller may trigger the synthetic DNS transport');
 });
