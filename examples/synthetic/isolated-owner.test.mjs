@@ -448,3 +448,57 @@ test('controlled shutdown on a fresh adapter is idempotent and never spawns',asy
   assert.equal(await adapter.authorize('fixture.reader',manifest.capabilities[0],{signal}),false);
   await assert.rejects(adapter.readStatus({signal}),/^Error: isolated fixture unavailable$/);
 });
+
+
+test('bounded shutdown acknowledgment waits for real child CLOSE across concurrent owners',async()=>{
+  const adapter=owner('hang',{maxConcurrent:2,deadlineMs:750});
+  const first=await grant(adapter,new AbortController().signal);
+  const second=await grant(adapter,new AbortController().signal);
+  const a=adapter.readStatus({signal:first}).then(()=>false,()=>true);
+  const b=adapter.readStatus({signal:second}).then(()=>false,()=>true);
+  assert.equal(adapter.activeCount(),2);
+  const stopped=adapter.shutdownAndWait();
+  const secondWaiter=adapter.shutdownAndWait();
+  assert.equal(adapter.activeCount(),2,
+    'Signaling shutdown must not report OS child closure synchronously');
+  assert.deepEqual(await Promise.all([a,b]),[true,true]);
+  assert.deepEqual(await Promise.all([stopped,secondWaiter]),[true,true]);
+  assert.equal(adapter.activeCount(),0,
+    'Acknowledgment must occur only after all child CLOSE leases are released');
+  assert.equal(adapter.shutdown(),false);
+  const unapproved=new AbortController().signal;
+  assert.equal(await adapter.authorize('fixture.reader',manifest.capabilities[0],
+    {signal:unapproved}),false);
+  await assert.rejects(adapter.readStatus({signal:unapproved}),
+    /^Error: isolated fixture unavailable$/);
+});
+
+test('shutdown acknowledgment validates its deadline before stopping the owner',async()=>{
+  const adapter=owner('ok');
+  for(const invalid of [0,-1,5001,Infinity,NaN,'100',null]) {
+    assert.throws(()=>adapter.shutdownAndWait(invalid),RangeError);
+  }
+  const signal=new AbortController().signal;
+  assert.equal(await adapter.authorize('fixture.reader',manifest.capabilities[0],
+    {signal}),true,'Invalid shutdown arguments must not accidentally revoke an owner');
+  assert.equal((await adapter.readStatus({signal})).state,'ok');
+  assert.equal(await adapter.shutdownAndWait(50),true,
+    'An already-idle synthetic owner acknowledges shutdown immediately');
+  assert.equal(await adapter.shutdownAndWait(50),true,
+    'Repeated acknowledged shutdown remains safe and idempotent');
+  assert.equal(adapter.activeCount(),0);
+});
+
+test('shutdown acknowledgment holds for a POSIX pipe-owning descendant',{
+  skip:process.platform==='win32',
+},async()=>{
+  const adapter=owner('tree-hang',{deadlineMs:750});
+  const signal=await grant(adapter,new AbortController().signal);
+  const work=adapter.readStatus({signal}).then(()=>false,()=>true);
+  assert.equal(adapter.activeCount(),1);
+  const acknowledged=adapter.shutdownAndWait(2000);
+  assert.equal(await work,true);
+  assert.equal(await acknowledged,true);
+  assert.equal(adapter.activeCount(),0,
+    'Owned process-group descendant must close before shutdown acknowledgment');
+});
