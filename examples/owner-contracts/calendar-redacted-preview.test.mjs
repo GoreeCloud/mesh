@@ -6,6 +6,11 @@ import {
   parseCalendarRedactedPreview as parse,
 } from './calendar-redacted-preview.mjs';
 
+// Node's normal npm test invocation intentionally supplies no fixture flag.
+// Opt in explicitly inside this isolated test worker; the dedicated negative
+// test clears the flag and verifies that production-default construction fails.
+process.env.GC_MESH_CALENDAR_PREVIEW_FIXTURE = '1';
+
 const valid = (total = 2, imported = 1) => ({
   status: 200, contentType: 'application/json; charset=utf-8',
   body: '{"total":' + total + ',"would_import":' + imported +
