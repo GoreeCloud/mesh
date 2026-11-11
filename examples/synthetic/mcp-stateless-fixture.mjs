@@ -156,7 +156,8 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // accept unexpected configuration, or permit callback replacement midflight.
   const methods = record(bridge, ['listTools', 'callTool'], ['listTools', 'callTool']);
   const settings = record(options, [
-    'isAuthenticated', 'maxConcurrentCalls', 'maxConcurrentPerActor', 'callTimeoutMs',
+    'isAuthenticated', 'maxConcurrentCalls', 'maxConcurrentPerActor',
+    'maxCallsPerActorWindow', 'actorWindowMs', 'callTimeoutMs',
   ], ['isAuthenticated']);
   if (!methods || !settings || typeof methods.listTools !== 'function' ||
       typeof methods.callTool !== 'function' ||
@@ -168,6 +169,10 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // Optional local fairness constraint. A trusted host MUST bind actor to a
   // verified principal; model-provided clientInfo never chooses a quota key.
   const maxConcurrentPerActor = settings.maxConcurrentPerActor;
+  // Optional fixed-window quota for admitted synthetic reads. Unlike a
+  // concurrency cap, this limits fast sequential calls from the same actor.
+  const maxCallsPerActorWindow = settings.maxCallsPerActorWindow;
+  const actorWindowMs = settings.actorWindowMs === undefined ? 1000 : settings.actorWindowMs;
   const callTimeoutMs = settings.callTimeoutMs === undefined ? 2000 : settings.callTimeoutMs;
   const listTools = methods.listTools;
   const callTool = methods.callTool;
@@ -175,6 +180,11 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
       (maxConcurrentPerActor !== undefined &&
         (!Number.isInteger(maxConcurrentPerActor) || maxConcurrentPerActor < 1 ||
          maxConcurrentPerActor > maxConcurrentCalls)) ||
+      (maxCallsPerActorWindow !== undefined &&
+        (!Number.isInteger(maxCallsPerActorWindow) || maxCallsPerActorWindow < 1 ||
+         maxCallsPerActorWindow > 64)) ||
+      (settings.actorWindowMs !== undefined && maxCallsPerActorWindow === undefined) ||
+      !Number.isInteger(actorWindowMs) || actorWindowMs < 100 || actorWindowMs > 60000 ||
       !Number.isInteger(callTimeoutMs) || callTimeoutMs < 1 || callTimeoutMs > 30000) {
     throw new RangeError('Invalid synthetic MCP admission limits');
   }
@@ -182,6 +192,8 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // promise settling can do so, preventing runaway work after a timeout.
   let inFlight = 0;
   const byActor = new Map(); // bounded by global admitted workers, not remote claims
+  const actorWindows = new Map();
+  const maxTrackedActors = 128; // bounded memory, even for rapidly rotating actors
   return Object.freeze({
     async dispatch(envelope, trustedContext) {
       const rpc = record(envelope, ['jsonrpc', 'id', 'method', 'params'],
@@ -234,8 +246,10 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
               !record(params.arguments, [])) return rpcError(rpc.id, -32602, 'Invalid params');
           // When per-actor fairness is enabled, reject principals without a
           // bounded host-authenticated key instead of pooling them as "guest".
-          const actor = maxConcurrentPerActor === undefined ? null : host.actor;
-          if (maxConcurrentPerActor !== undefined &&
+          const actorQuotaEnabled = maxConcurrentPerActor !== undefined ||
+            maxCallsPerActorWindow !== undefined;
+          const actor = actorQuotaEnabled ? host.actor : null;
+          if (actorQuotaEnabled &&
               (typeof actor !== 'string' ||
                !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(actor))) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
@@ -244,6 +258,22 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
               (maxConcurrentPerActor !== undefined &&
                (byActor.get(actor) ?? 0) >= maxConcurrentPerActor)) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
+          if (maxCallsPerActorWindow !== undefined) {
+            const now = Date.now();
+            // Expired quotas are forgotten; new keys are refused if the
+            // bounded local ledger is full, never allowed to grow forever.
+            for (const [key, window] of actorWindows) {
+              if (now - window.startedAt >= actorWindowMs) actorWindows.delete(key);
+            }
+            const current = actorWindows.get(actor);
+            if ((!current && actorWindows.size >= maxTrackedActors) ||
+                (current && current.count >= maxCallsPerActorWindow)) {
+              return rpcError(rpc.id, -32000, 'Capability unavailable');
+            }
+            actorWindows.set(actor, current
+              ? { startedAt: current.startedAt, count: current.count + 1 }
+              : { startedAt: now, count: 1 });
           }
           inFlight += 1;
           if (maxConcurrentPerActor !== undefined) {
