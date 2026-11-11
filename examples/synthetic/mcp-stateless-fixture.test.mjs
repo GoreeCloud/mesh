@@ -277,3 +277,76 @@ test('tool inventory is not visible to an unauthenticated caller even when its g
   assert.equal(reply.error.code,-32000);
   assert.equal(reads,0);
 });
+
+
+test('host registration snapshots callback descriptors without invoking injected getters', async () => {
+  let accessed=0;
+  const badBridge=Object.defineProperty({
+    callTool(){return {content:[{type:'text',text:'ok'}]}},
+  },'listTools',{get(){accessed++;throw Error('secret getter')}});
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher(badBridge,{
+    isAuthenticated:()=>true,
+  }),TypeError);
+  const goodBridge={listTools(){return []},async callTool(){return {content:[{type:'text',text:'ok'}]}}};
+  for(const prop of ['isAuthenticated','maxConcurrentCalls','callTimeoutMs']){
+    const config={isAuthenticated:()=>true};
+    Object.defineProperty(config,prop,{get(){accessed++;throw Error('private options')}});
+    assert.throws(()=>createSyntheticStatelessMcpDispatcher(goodBridge,config),TypeError);
+  }
+  const unexpected={isAuthenticated:()=>true,authorizationOverride:true};
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher(goodBridge,unexpected),TypeError);
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher(goodBridge,null),TypeError);
+  assert.equal(accessed,0,'Untrusted registration getters must not execute');
+});
+
+test('post-registration callback mutation cannot swap owner methods or authentication',async()=>{
+  let listed=0, called=0, authenticated=0, swapped=0;
+  const bridge={
+    listTools(){listed++;assert.equal(this,bridge);return[]},
+    callTool(){called++;assert.equal(this,bridge);
+      return {content:[{type:'text',text:'synthetic'}]};},
+  };
+  const options={isAuthenticated(ctx){authenticated++;return ctx?.authenticated===true}};
+  const server=createSyntheticStatelessMcpDispatcher(bridge,options);
+  bridge.listTools=()=>{swapped++;throw Error('private listing')};
+  bridge.callTool=()=>{swapped++;throw Error('private invocation')};
+  options.isAuthenticated=()=>{swapped++;return false};
+  const catalog=await server.dispatch(request('tools/list'),authorized);
+  assert.deepEqual(catalog.result.tools,[]);
+  const result=await server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),authorized);
+  assert.equal(result.result.content[0].text,'synthetic');
+  assert.equal(result.result.isError,false);
+  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,2);
+  assert.equal(swapped,0,'Never trust callbacks changed after registration');
+});
+
+test('catalog array length and subclass metadata cannot run methods or leak fields',async()=>{
+  let reads=0;
+  const valid=()=>({
+    name:'mesh__example_health__status_read',
+    title:'Synthetic status fixture',
+    description:'Local-only status; no live service',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
+  });
+  const proxied=new Proxy([valid()],{get(target,key,receiver){
+    if(key==='length'){reads++;throw Error('secret array length')}
+    return Reflect.get(target,key,receiver);
+  }});
+  const inherited=new (class CustomList extends Array {})();
+  inherited.push(valid());
+  for(const catalog of [proxied,inherited]){
+    const server=createSyntheticStatelessMcpDispatcher({
+      listTools(){return catalog},async callTool(){throw Error('unused')}
+    },{isAuthenticated:()=>true});
+    const result=await server.dispatch(request('tools/list'),authorized);
+    if(catalog===proxied){
+      // Proxy traps cannot be blocked in general, but no accessor-style
+      // property *read* should be needed for a canonical list snapshot.
+      assert.equal(result.result.tools.length,1);
+    } else assert.equal(result.error.code,-32000);
+  }
+  assert.equal(reads,0,'Never read an untrusted array length via a property get');
+});
