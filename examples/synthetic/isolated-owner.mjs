@@ -87,6 +87,9 @@ export function createIsolatedSyntheticOwner(options) {
   // Only fixed-code local children are registered; shutdown never accepts a
   // caller-selected PID or program path.
   const activeKills = new Set();
+  // Explicit teardown can await actual OS CLOSE, not just a SIGKILL request.
+  // Waiters are cleared on close or on their own bounded timeout.
+  const idleWaiters = new Set();
   const starts = [];
   const pruneStarts = now => {
     while (starts.length && now - starts[0] >= LAUNCH_WINDOW_MS) starts.shift();
@@ -101,6 +104,26 @@ export function createIsolatedSyntheticOwner(options) {
     } catch { return null; }
   };
 
+  const stop = () => {
+    if (stopped) return false;
+    stopped = true;
+    for (const kill of [...activeKills]) kill();
+    return true;
+  };
+  const whenIdle = timeoutMs => {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 5000) {
+      throw new RangeError('invalid synthetic shutdown wait deadline');
+    }
+    if (active === 0) return Promise.resolve(true);
+    return new Promise((resolve, reject) => {
+      const complete = () => { clearTimeout(timer); idleWaiters.delete(complete); resolve(true); };
+      const timer = setTimeout(() => {
+        idleWaiters.delete(complete);
+        reject(unavailable());
+      }, timeoutMs);
+      idleWaiters.add(complete);
+    });
+  };
   return Object.freeze({
     async authorize(actor, capability, context = {}) {
       const signal = safeSignal(context);
@@ -130,11 +153,14 @@ export function createIsolatedSyntheticOwner(options) {
       pruneStarts(performance.now());
       return starts.length;
     },
-    shutdown() {
-      if (stopped) return false;
-      stopped = true;
-      for (const kill of [...activeKills]) kill();
-      return true;
+    shutdown: stop,
+    shutdownAndWait(timeoutMs = 2000) {
+      // Validate before stopping; a mistyped call must not teardown the host.
+      if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 5000) {
+        throw new RangeError('invalid synthetic shutdown wait deadline');
+      }
+      stop();
+      return whenIdle(timeoutMs);
     },
     async readStatus(context = {}) {
       const signal = safeSignal(context);
@@ -173,6 +199,9 @@ export function createIsolatedSyntheticOwner(options) {
             activeKills.delete(kill);
             active -= 1;
             globalActive -= 1;
+            if (active === 0) {
+              for (const complete of [...idleWaiters]) complete();
+            }
           }
           clearTimeout(timer);
           // A caller may shadow EventTarget cleanup on a genuine AbortSignal.
