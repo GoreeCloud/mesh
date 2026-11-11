@@ -396,3 +396,55 @@ test('POSIX caller abort kills the owned descendant group without late success',
     'Abort must terminate all descendants holding inherited child resources');
   assert.equal(adapter.launchesInWindow(),1);
 });
+
+
+test('controlled shutdown rejects new admissions and reclaims two running fixed-code owners',async()=>{
+  const adapter=owner('hang',{maxConcurrent:2,deadlineMs:750});
+  const firstSignal=await grant(adapter,new AbortController().signal);
+  const secondSignal=await grant(adapter,new AbortController().signal);
+  const a=adapter.readStatus({signal:firstSignal});
+  const b=adapter.readStatus({signal:secondSignal});
+  assert.equal(adapter.activeCount(),2);
+  assert.equal(adapter.shutdown(),true);
+  assert.equal(adapter.shutdown(),false,'Shutdown must be idempotent');
+  await assert.rejects(a,/isolated fixture unavailable/);
+  await assert.rejects(b,/isolated fixture unavailable/);
+  // Slots remain charged until real process CLOSE, never released merely
+  // because shutdown completed or the caller received its generic denial.
+  for(let n=0;n<100 && adapter.activeCount();n++)await delay(10);
+  assert.equal(adapter.activeCount(),0,'Shutdown children must actually close');
+  assert.equal(await adapter.authorize('fixture.reader',manifest.capabilities[0],{
+    signal:new AbortController().signal,
+  }),false);
+  const refused=new AbortController().signal;
+  await assert.rejects(adapter.readStatus({signal:refused}),
+    /^Error: isolated fixture unavailable$/);
+  assert.equal(adapter.launchesInWindow(),2,'Stopped owner cannot spawn more children');
+});
+
+test('shutdown invalidates an unresolved owner permit before it issues a read ticket',async()=>{
+  let release;
+  const adapter=owner('ok',{
+    permit:()=>new Promise(resolve=>{release=resolve}),
+  });
+  const signal=new AbortController().signal;
+  const pending=adapter.authorize('fixture.reader',manifest.capabilities[0],{signal});
+  assert.equal(typeof release,'function');
+  assert.equal(adapter.shutdown(),true);
+  release(true);
+  assert.equal(await pending,false,'Late policy approval cannot bypass shutdown');
+  await assert.rejects(adapter.readStatus({signal}),/^Error: isolated fixture unavailable$/);
+  assert.equal(adapter.launchesInWindow(),0);
+  assert.equal(adapter.activeCount(),0);
+});
+
+test('controlled shutdown on a fresh adapter is idempotent and never spawns',async()=>{
+  const adapter=owner('ok');
+  assert.equal(adapter.shutdown(),true);
+  assert.equal(adapter.shutdown(),false);
+  assert.equal(adapter.activeCount(),0);
+  assert.equal(adapter.launchesInWindow(),0);
+  const signal=new AbortController().signal;
+  assert.equal(await adapter.authorize('fixture.reader',manifest.capabilities[0],{signal}),false);
+  await assert.rejects(adapter.readStatus({signal}),/^Error: isolated fixture unavailable$/);
+});
