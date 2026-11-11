@@ -9,14 +9,60 @@ const TOOL_PREFIX = 'mesh__';
 const nameFor = id => TOOL_PREFIX + id.replaceAll('.', '_') + '__status_read';
 const deny = () => ({ isError: true, content: [{ type: 'text', text: 'Capability unavailable.' }] });
 
-export function createSyntheticMcpToolBridge(harness, { resolveActor } = {}) {
-  if (!harness || typeof harness.discover !== 'function' || typeof harness.read !== 'function' ||
-      typeof resolveActor !== 'function') {
+// Registration data is untrusted even in a local fixture. Never invoke getters
+// while accepting callbacks or catalog metadata; bind source methods once.
+function snapshotRecord(value, allowed, required = allowed) {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some(key => typeof key !== 'string' || !allowed.includes(key)) ||
+        required.some(key => !keys.includes(key))) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const snapshot = Object.create(null);
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(descriptors[key], 'value')) return null;
+      snapshot[key] = descriptors[key].value;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+
+export function createSyntheticMcpToolBridge(harness, options = {}) {
+  const source = snapshotRecord(harness, ['discover', 'read']);
+  const settings = snapshotRecord(options, ['resolveActor']);
+  if (!source || !settings || typeof source.discover !== 'function' ||
+      typeof source.read !== 'function' || typeof settings.resolveActor !== 'function') {
     throw new TypeError('A synthetic harness and trusted actor resolver are required');
   }
+  const { discover, read } = source;
+  const { resolveActor } = settings;
+  let inventory;
+  try {
+    inventory = Reflect.apply(discover, harness, []);
+    if (!Array.isArray(inventory) || Object.getPrototypeOf(inventory) !== Array.prototype ||
+        inventory.length < 1 || inventory.length > 32 ||
+        Reflect.ownKeys(inventory).length !== inventory.length + 1) {
+      throw new TypeError('Invalid synthetic inventory');
+    }
+  } catch {
+    throw new TypeError('Invalid synthetic inventory');
+  }
   const map = new Map();
-  for (const item of harness.discover()) {
-    if (typeof item.id !== 'string' || !CAPABILITY_ID.test(item.id) ||
+  for (let index = 0; index < inventory.length; index++) {
+    let slot;
+    try { slot = Object.getOwnPropertyDescriptor(inventory, String(index)); }
+    catch { throw new TypeError('Invalid synthetic inventory'); }
+    const item = slot && Object.prototype.hasOwnProperty.call(slot, 'value')
+      ? snapshotRecord(slot.value,
+          ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status'],
+          ['id', 'operation', 'sensitivity', 'evidence_status'])
+      : null;
+    if (!item || typeof item.id !== 'string' || !CAPABILITY_ID.test(item.id) ||
         item.operation !== 'status.read' || item.sensitivity !== 'synthetic' ||
         item.evidence_status !== 'prototype') {
       throw new TypeError('Only synthetic read-only status capabilities may be bridged');
@@ -54,7 +100,7 @@ export function createSyntheticMcpToolBridge(harness, { resolveActor } = {}) {
         // Only a trusted host supplies the context; no identity comes from args.
         const actor = resolveActor(trustedContext);
         if (typeof actor !== 'string') return deny();
-        const result = await harness.read({ actor, capabilityId: map.get(name), operation: 'status.read' });
+        const result = await Reflect.apply(read, harness, [{ actor, capabilityId: map.get(name), operation: 'status.read' }]);
         if (result?.ok !== true || result.kind !== 'synthetic_result' ||
             result.evidence_status !== 'prototype' || !result.data) return deny();
         // Existing harness has already validated and bounded the exact source fields.

@@ -15,3 +15,14 @@ listTools() produces deterministic, read-only, namespaced tool descriptors with 
 The latest published MCP revision examined during design was **2026-07-28**. It introduced a stateless protocol core and server/discover in place of the old initialize exchange. This fixture deliberately does **not** implement that JSON-RPC envelope, transports, negotiated version profiles, authorizations or discovery handshake. Therefore its MCP-shaped tool listing and call results are **not** protocol conformance.
 
 Before a genuine endpoint, add a supported audited MCP SDK or equivalent verified transport, per-request authenticated principal binding, strict protocol/version handling, Identity-backed issuer/tenant/scope checks, consent/approval under GoreeShield, Wardveil controls, quotas, cancellation and deadline coverage, audit minimization, fault injection and end-to-end external client tests. Do not change existing non-MCP Mesh interactions or promote the fixture as production-ready.
+
+## Host registration integrity (synthetic fixture only)
+
+The bridge accepts a bounded own-data snapshot of source `discover` and `read`
+callbacks, host `resolveActor`, and the synthetic capability catalog. Accessor-backed,
+unexpected, sparse, or malformed registration data is refused without invoking
+property getters. Owner read and actor-resolution callbacks are captured once, so
+subsequent mutation of the caller's registration objects cannot silently replace
+them. Proxy/owner exceptions fail closed. The identity and permission source
+remains the trusted host; this is neither a production sandbox nor external MCP
+authentication, authorization, or client certification.

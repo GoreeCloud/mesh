@@ -69,3 +69,52 @@ test('hostile accessor args do not execute, invalid fixtures reject', async () =
   assert.throws(() => createSyntheticMcpToolBridge(harness), TypeError);
   assert.throws(() => createSyntheticMcpToolBridge({ discover:()=>[{...catalog[0],operation:'status.write'}],read(){} },{resolveActor:getActor}),TypeError);
 });
+
+test('bridge registration rejects accessor-backed callbacks and catalog metadata without evaluating getters',()=>{
+  const { harness }=source();
+  let getters=0;
+  const readGetter=Object.defineProperty({discover:harness.discover},'read',{
+    enumerable:true,get(){getters++;return harness.read;},
+  });
+  const resolverGetter=Object.defineProperty({},'resolveActor',{
+    enumerable:true,get(){getters++;return getActor;},
+  });
+  const catalogGetter=Object.defineProperty({...catalog[0]},'id',{
+    enumerable:true,get(){getters++;return 'fixture.alpha.status';},
+  });
+  for(const create of [
+    ()=>createSyntheticMcpToolBridge(readGetter,{resolveActor:getActor}),
+    ()=>createSyntheticMcpToolBridge(harness,resolverGetter),
+    ()=>createSyntheticMcpToolBridge({discover(){return [catalogGetter]},read:harness.read},{resolveActor:getActor}),
+  ])assert.throws(create,TypeError);
+  assert.equal(getters,0,'Registration cannot evaluate untrusted getter callbacks or fields');
+});
+
+test('bridge registration binds owner read and actor resolver against post-registration replacement',async()=>{
+  const {harness,events}=source();
+  let originalResolverCalls=0, replacementCalls=0;
+  const options={resolveActor:context=>{
+    originalResolverCalls++;
+    return context?.authenticatedActor;
+  }};
+  const bridge=createSyntheticMcpToolBridge(harness,options);
+  const tool=bridge.listTools()[0].name;
+  harness.read=async()=>{replacementCalls++;throw Error('untrusted replacement');};
+  harness.discover=()=>{throw Error('late catalog replacement');};
+  options.resolveActor=()=>{replacementCalls++;return 'fixture.stranger';};
+  const result=await bridge.callTool(tool,{}, {authenticatedActor:'fixture.reader'});
+  assert.equal(result.isError,undefined);
+  assert.equal(JSON.parse(result.content[0].text).environment,'synthetic-local-only');
+  assert.equal(originalResolverCalls,1);
+  assert.equal(replacementCalls,0);
+  assert.equal(events.length,1);
+});
+
+test('synthetic bridge refuses undeclared registration metadata and sparse discovery arrays',()=>{
+  const {harness}=source();
+  const options={resolveActor:getActor};
+  assert.throws(()=>createSyntheticMcpToolBridge({...harness,extra:()=>{}},options),TypeError);
+  assert.throws(()=>createSyntheticMcpToolBridge(harness,{...options,admin:true}),TypeError);
+  const sparse=new Array(2);sparse[0]={...catalog[0]};
+  assert.throws(()=>createSyntheticMcpToolBridge({discover:()=>sparse,read:harness.read},options),TypeError);
+});
