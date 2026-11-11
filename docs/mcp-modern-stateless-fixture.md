@@ -17,6 +17,12 @@ The root npm test automatically includes examples/synthetic/mcp-stateless-fixtur
 
 Tested scenarios include two trusted mock host contexts, stateless discovery/list/call, anonymous refusal before list or execution, denied owners, mutation arguments, injected actor claims, malformed requests, inaccessible/failed owners, getter/proxy input rejection, saturation denial, timeout admission retention and invalid limit rejection.
 
+## Immutable synthetic host identity during admission
+
+The host must supply an already authenticated, **flat, scalar-only** context for each dispatch. The synthetic dispatcher now snapshots and freezes up to 16 own-data fields (bounded string, boolean, safe integer or null) before invoking the trusted host authentication callback. The **same snapshot** is then passed to the deferred owner tool call. Unexpected getters, proxies that fail validation, nested objects, oversized claims, functions, symbols, and invalid property names are denied before authentication or owner execution. Mutating a caller's original `actor` or `authenticated` fields after admission cannot switch the principal observed by owner callbacks.
+
+This is defense-in-depth for **local development fixtures**; it is not an authentication mechanism or a claim that flat arbitrary host fields are verified. Authentication still depends entirely on a correctly configured trusted host callback, and production Identity claims need their own signed credential validation, principal binding, consent, privacy policy, and Wardveil checks. Nested production identity data is intentionally out of this fixture's scope.
+
 ## Trusted-host registration integrity
 
 The constructor snapshots exact own-data `listTools` and `callTool` methods and exact own-data authentication/concurrency settings, rejecting accessor-backed, proxy-failing, unexpected or incomplete registration objects. Later mutation of a host callback cannot substitute tool enumeration, owner invocation or the authentication function. The host remains responsible for supplying a trustworthy identity; this does **not** verify an Identity token. Synthetic catalogs also validate an inert, canonical array descriptor rather than reading a potentially hostile `length` property.
