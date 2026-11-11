@@ -212,3 +212,13 @@ private bootstrap page response is rejected and redacted on the fixed health
 route. This is contract compatibility and data-boundary testing, not a released
 Identity tenant-scope integration, GoreeShield consent grant, Wardveil security
 signoff, native-client synchronization, or live service deployment.
+
+## GoreeCloud DNS client health — source-owned synthetic contract (November 10, 2026)
+
+The `dns-health.mjs` adapter exercises a **synthetic, transport-injected** form of the first-party Technitium-derived GoreeCloud DNS `GET /api/dnsClient/healthCheck` endpoint. Source boundaries: `GoreeCloud/DNS/DnsServerCore/WebServiceApi.cs` blob `333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40` runs `DirectQueryAsync` for an A query of `localhost` when no domain is supplied; `APIDOCS.md` blob `fb1e769a04fc00e384189cee9f417532a4c75a22` documents `DnsClient: View`, the fixed path, and a response containing `server` and `status:ok`. The web service returns `application/json; charset=utf-8`. The source also permits local calls without a user session; **do not expose or rely on that exemption as a real Mesh authorization path**.
+
+The fixture has **no socket, URL, token, credential, production transport, DNS query or user data**. A trusted caller supplies a transport, and both a separate Mesh-level and adapter-level explicit permit must grant before invocation (default deny). Only an exact bounded two-field response from that transport, an unambiguous ASCII DNS server name and `status:ok` yield the minimal `{state:'ok',observed_at}` synthetic projection. Server name, raw body and transport errors are never passed to Mesh. Tests reject duplicate/unknown fields, Unicode escape aliases, response accessor traps, wrong content type/status, malformed timestamps and aborts.
+
+This check is **internal DNS client query liveness only**. It does **not** verify upstream recursive DNS availability, DoH/DoT/DoQ certificate/protocol behavior, DNSSEC, published listener routing, encrypted DNS migration, GoreeShield privacy consent, Wardveil cybersecurity enforcement, or production readiness. A future real connector must independently prove scoped Identity authorization, transport TLS, owner-side `DnsClient: View` semantics, consent and network isolation before using any actual service. Both source-owned and Mesh tests must remain green after source changes.
+
+A separate regression also routes this fixture through the current Mesh synthetic 2026-07-28 MCP-shaped request dispatcher (`server/discover`, `tools/list`, `tools/call`). This establishes local contract interoperability between the DNS fixture and the common read-only Mesh tool interface, **not** real DNS connectivity, a published MCP server or external AI client compatibility.
