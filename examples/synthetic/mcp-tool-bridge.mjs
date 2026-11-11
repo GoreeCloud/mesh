@@ -42,16 +42,21 @@ export function createSyntheticMcpToolBridge(harness, options = {}) {
   const { discover, read } = source;
   const { resolveActor } = settings;
   let inventory;
-  try { inventory = Reflect.apply(discover, harness, []); }
-  catch { throw new TypeError('Invalid synthetic inventory'); }
-  if (!Array.isArray(inventory) || Object.getPrototypeOf(inventory) !== Array.prototype ||
-      inventory.length < 1 || inventory.length > 32 ||
-      Reflect.ownKeys(inventory).length !== inventory.length + 1) {
+  try {
+    inventory = Reflect.apply(discover, harness, []);
+    if (!Array.isArray(inventory) || Object.getPrototypeOf(inventory) !== Array.prototype ||
+        inventory.length < 1 || inventory.length > 32 ||
+        Reflect.ownKeys(inventory).length !== inventory.length + 1) {
+      throw new TypeError('Invalid synthetic inventory');
+    }
+  } catch {
     throw new TypeError('Invalid synthetic inventory');
   }
   const map = new Map();
   for (let index = 0; index < inventory.length; index++) {
-    const slot = Object.getOwnPropertyDescriptor(inventory, String(index));
+    let slot;
+    try { slot = Object.getOwnPropertyDescriptor(inventory, String(index)); }
+    catch { throw new TypeError('Invalid synthetic inventory'); }
     const item = slot && Object.prototype.hasOwnProperty.call(slot, 'value')
       ? snapshotRecord(slot.value,
           ['id', 'owner', 'version', 'operation', 'sensitivity', 'evidence_status'],
