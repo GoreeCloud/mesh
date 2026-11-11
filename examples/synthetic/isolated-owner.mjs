@@ -83,6 +83,10 @@ export function createIsolatedSyntheticOwner(options) {
   // any older pending allow, even when its policy callback resolves late.
   const authorizationVersions = new WeakMap();
   let active = 0;
+  let stopped = false;
+  // Only fixed-code local children are registered; shutdown never accepts a
+  // caller-selected PID or program path.
+  const activeKills = new Set();
   const starts = [];
   const pruneStarts = now => {
     while (starts.length && now - starts[0] >= LAUNCH_WINDOW_MS) starts.shift();
@@ -100,7 +104,7 @@ export function createIsolatedSyntheticOwner(options) {
   return Object.freeze({
     async authorize(actor, capability, context = {}) {
       const signal = safeSignal(context);
-      if (!signal) return false;
+      if (!signal || stopped) return false;
       // Every newer authorization attempt invalidates an older granted or
       // still-pending ticket, including when policy callbacks resolve out of order.
       const version = (authorizationVersions.get(signal) || 0) + 1;
@@ -109,13 +113,13 @@ export function createIsolatedSyntheticOwner(options) {
       try {
         // This fixed-code child serves only fixture.alpha.status. Do not
         // turn a permit for another advertised capability into a read ticket.
-        if (signal.aborted || typeof actor !== 'string' || !ACTOR_ID.test(actor)) {
+        if (stopped || signal.aborted || typeof actor !== 'string' || !ACTOR_ID.test(actor)) {
           return false;
         }
         const checked = checkedOwnFixtureCapability(capability);
         if (!checked) return false;
         const allowed = (await permit(actor, checked, { signal })) === true;
-        if (!allowed || signal.aborted ||
+        if (!allowed || stopped || signal.aborted ||
             authorizationVersions.get(signal) !== version) return false;
         authorizedSignals.add(signal);
         return true;
@@ -126,10 +130,16 @@ export function createIsolatedSyntheticOwner(options) {
       pruneStarts(performance.now());
       return starts.length;
     },
+    shutdown() {
+      if (stopped) return false;
+      stopped = true;
+      for (const kill of [...activeKills]) kill();
+      return true;
+    },
     async readStatus(context = {}) {
       const signal = safeSignal(context);
       try {
-        if (!signal || !authorizedSignals.delete(signal) ||
+        if (stopped || !signal || !authorizedSignals.delete(signal) ||
             signal.aborted || active >= maxConcurrent ||
             globalActive >= MAX_GLOBAL_CHILDREN) {
           throw unavailable();
@@ -160,6 +170,7 @@ export function createIsolatedSyntheticOwner(options) {
         const release = () => {
           if (!released) {
             released = true;
+            activeKills.delete(kill);
             active -= 1;
             globalActive -= 1;
           }
@@ -193,6 +204,7 @@ export function createIsolatedSyntheticOwner(options) {
           finish(null); // Caller cannot trust a timed-out child.
         };
         const onAbort = () => kill();
+        activeKills.add(kill);
         try {
           child = spawn(process.execPath, [childPath, mode], {
             shell: false,
