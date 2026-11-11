@@ -51,11 +51,20 @@ function validMeta(raw) {
 }
 
 /** Host must supply a previously authenticated context and independent permit. */
-export function createSyntheticStatelessMcpDispatcher(bridge, { isAuthenticated } = {}) {
+export function createSyntheticStatelessMcpDispatcher(bridge, {
+  isAuthenticated, maxConcurrentCalls = 4, callTimeoutMs = 2000,
+} = {}) {
   if (!bridge || typeof bridge.listTools !== 'function' || typeof bridge.callTool !== 'function' ||
       typeof isAuthenticated !== 'function') {
     throw new TypeError('Synthetic bridge and trusted authentication check required');
   }
+  if (!Number.isInteger(maxConcurrentCalls) || maxConcurrentCalls < 1 || maxConcurrentCalls > 16 ||
+      !Number.isInteger(callTimeoutMs) || callTimeoutMs < 1 || callTimeoutMs > 30000) {
+    throw new RangeError('Invalid synthetic MCP admission limits');
+  }
+  // A timed-out caller never frees a worker slot. Only the actual owner
+  // promise settling can do so, preventing runaway work after a timeout.
+  let inFlight = 0;
   return Object.freeze({
     async dispatch(envelope, trustedContext) {
       const rpc = record(envelope, ['jsonrpc', 'id', 'method', 'params'],
@@ -92,7 +101,26 @@ export function createSyntheticStatelessMcpDispatcher(bridge, { isAuthenticated 
           // Model arguments are never copied into trustedContext.
           if (Object.prototype.hasOwnProperty.call(params, 'arguments') &&
               !record(params.arguments, [])) return rpcError(rpc.id, -32602, 'Invalid params');
-          const result = await bridge.callTool(params.name, params.arguments ?? {}, trustedContext);
+          if (inFlight >= maxConcurrentCalls) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
+          inFlight += 1;
+          // Catch owner failures, and hold admission until work REALLY settles.
+          // Promise.race limits the waiting caller, not the untrusted execution.
+          const operation = Promise.resolve()
+            .then(() => bridge.callTool(params.name, params.arguments ?? {}, trustedContext))
+            .catch(() => null)
+            .finally(() => { inFlight -= 1; });
+          let timer;
+          let result;
+          try {
+            result = await Promise.race([
+              operation,
+              new Promise(resolve => { timer = setTimeout(() => resolve(null), callTimeoutMs); }),
+            ]);
+          } finally {
+            clearTimeout(timer);
+          }
           if (!result || !Array.isArray(result.content) || result.content.length !== 1 ||
               result.content[0]?.type !== 'text' ||
               typeof result.content[0].text !== 'string' ||
