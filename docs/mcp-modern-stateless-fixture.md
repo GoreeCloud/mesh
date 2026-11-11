@@ -4,7 +4,7 @@
 
 ## Scope
 
-- The createSyntheticStatelessMcpDispatcher(bridge, { isAuthenticated, maxConcurrentCalls, callTimeoutMs }) function accepts only host-provided, previously authenticated trustedContext; model-provided _meta.clientInfo, tool names or arguments are never authentication.
+- The createSyntheticStatelessMcpDispatcher(bridge, { isAuthenticated, maxConcurrentCalls, maxConcurrentPerActor?, callTimeoutMs }) function accepts only host-provided, previously authenticated trustedContext; model-provided _meta.clientInfo, tool names or arguments are never authentication.
 - Supports server/discover, tools/list, and tools/call with the **2026-07-28** required per-request _meta fields (version and client capabilities; optional bounded client info), returning modern resultType: complete envelopes.
 - Exposes only fixed synthetic status-read capabilities. All writes, unauthorized hosts, unexpected arguments, malformed envelopes, unsupported protocol versions and legacy initialize are rejected. Callers receive generic errors without upstream details. No real data, user tokens, filesystem, socket or remote service is accessed.
 - Accepts only an empty clientCapabilities object, no pagination or extensions, and a single text result bounded by the fixture. These restrictions are deliberately narrower than the actual MCP specification.
@@ -46,3 +46,7 @@ Reference specification: [2026-07-28 stateless core](https://github.com/modelcon
 ## Synthetic output byte-budget boundary
 
 The single client-visible text result is limited to **4,096 encoded UTF-8 bytes**, not 4,096 JavaScript code units. Multibyte BMP and supplementary-plane text above that byte cap is rejected with the existing generic `Capability unavailable` result rather than partially returned. This is a response-projection bound for the in-process fixture, not a transport, network, OS isolation, full output-token quota, or production MCP security guarantee.
+
+## Optional actor-scoped concurrency fairness (synthetic only)
+
+An in-process host may configure `maxConcurrentPerActor` (1 through the global `maxConcurrentCalls`) to cap simultaneous status reads for each **verified host-supplied** `trustedContext.actor`. Actor keys must be bounded ASCII identifiers, and missing or invalid keys are rejected when this limit is enabled. Each request still passes the independent synchronous host `isAuthenticated` check and the underlying Mesh and owner checks. Client-provided `_meta.clientInfo`, tool names, arguments, or agent labels never choose the actor quota identity. Capacity is charged before the owner starts and remains charged after timeout until the underlying owner promise actually settles; idle actors are removed from the in-memory map. The existing global default is unchanged when this option is omitted. This is bounded, local **concurrency fairness**, not a per-user rate limiter, tenant isolation, verified Identity integration, revocation, policy engine or deployable MCP server.
