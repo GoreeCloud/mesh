@@ -107,14 +107,28 @@ export function createSyntheticMcpToolBridge(harness, options = {}) {
           return deny();
         }
         if (typeof actor !== 'string') return deny();
-        const result = await Reflect.apply(read, harness, [{ actor, capabilityId: map.get(name), operation: 'status.read' }]);
-        if (result?.ok !== true || result.kind !== 'synthetic_result' ||
-            result.evidence_status !== 'prototype' || !result.data) return deny();
-        // Existing harness has already validated and bounded the exact source fields.
-        const { state, observed_at } = result.data;
-        if (!['ok', 'degraded'].includes(state) || typeof observed_at !== 'string') return deny();
+        const expectedCapabilityId = map.get(name);
+        const result = await Reflect.apply(read, harness, [{
+          actor, capabilityId: expectedCapabilityId, operation: 'status.read',
+        }]);
+        // Owner outputs are another trust boundary. Validate inert own data,
+        // including the capability binding, before projecting client-visible
+        // text. Never read a getter-backed result or status property.
+        const outcome = snapshotRecord(result, [
+          'ok', 'kind', 'capabilityId', 'evidence_status', 'data',
+        ]);
+        const status = outcome && snapshotRecord(outcome.data, ['state', 'observed_at']);
+        if (!outcome || outcome.ok !== true || outcome.kind !== 'synthetic_result' ||
+            outcome.capabilityId !== expectedCapabilityId ||
+            outcome.evidence_status !== 'prototype' || !status ||
+            !['ok', 'degraded'].includes(status.state) ||
+            typeof status.observed_at !== 'string') return deny();
+        const time = Date.parse(status.observed_at);
+        if (!Number.isFinite(time) ||
+            new Date(time).toISOString() !== status.observed_at) return deny();
         return { content: [{ type: 'text', text: JSON.stringify({
-          evidence_status: 'prototype', environment: 'synthetic-local-only', state, observed_at,
+          evidence_status: 'prototype', environment: 'synthetic-local-only',
+          state: status.state, observed_at: status.observed_at,
         }) }] };
       } catch {
         return deny();
