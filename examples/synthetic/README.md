@@ -39,6 +39,12 @@ The wrapper records completion order, not invocation order. It refuses an excess
 
 Validation: `npm test` includes `evidence.test.mjs` alongside the existing synthetic contract tests. Live Identity, GoreeShield, Wardveil, production telemetry, durable delivery and real adapters remain unimplemented.
 
+## POSIX fixed-code process-group cleanup (development test)
+
+When an isolated synthetic owner launches on POSIX, the fixed-code child now starts in its own process group. A deadline or caller abort sends SIGKILL to that owned group, rather than only to the immediate child, so a deliberately spawned fixed-code descendant cannot keep inherited stdout open and pin the capacity slot indefinitely. A dedicated `tree-hang` regression creates one synthetic descendant and verifies that both timeout and abort eventually reach the actual child `close` event, where the admission slot is released. Windows retains its existing immediate-child termination behavior and rejects the POSIX-only regression mode.
+
+This improves one fixed-code, local development subprocess fixture only. It is **not a secure OS sandbox**, process-tree protection against escaped process groups, cgroup memory/CPU enforcement, arbitrary-plugin execution, a durable worker supervisor, or production recovery. The child still inherits the runner's filesystem/network privileges; production owner execution must use platform isolation, independent watchdog supervision, OS quotas, authenticated transports, audited policy and restart budgets.
+
 ## Opt-in fixed-code process cancellation fixture
 
 [isolated-owner.mjs](isolated-owner.mjs) and its reviewed, fixed-code [child](isolated-owner-child.mjs) provide a narrow **synthetic-only** Node process-boundary experiment. It accepts no arbitrary executable, script, URL, environment variable, payload or owner plugin. Its child is spawned using the current trusted Node binary, `shell: false`, ignored stdin/stderr and a minimal environment without inherited application credentials. Output must match an exact two-field status contract and fit within 256 bytes.

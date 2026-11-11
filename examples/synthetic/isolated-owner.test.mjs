@@ -361,3 +361,38 @@ test('multiple fixture instances cannot bypass the module-wide child cap', async
   assert.equal((await read(harness(recovered))).ok, true,
     'new isolated healthy owner must be admitted after dead children close');
 });
+
+
+test('POSIX owner deadline terminates entire owned group including pipe-holding descendant', {
+  skip: process.platform === 'win32',
+}, async()=>{
+  const adapter = owner('tree-hang',{deadlineMs:250,maxConcurrent:1});
+  const signal=await grant(adapter,new AbortController().signal);
+  const work=adapter.readStatus({signal});
+  assert.equal(adapter.activeCount(),1);
+  await assert.rejects(work,/isolated fixture unavailable/);
+  // The synthetic grandchild inherits stdout. Direct child kill alone would
+  // leave its inherited pipe open and prevent the Node CLOSE lease release.
+  for(let n=0;n<100 && adapter.activeCount();n++)await delay(10);
+  assert.equal(adapter.activeCount(),0,
+    'All descendants must close their inherited pipe before admission returns');
+  assert.equal(adapter.launchesInWindow(),1);
+});
+
+test('POSIX caller abort kills the owned descendant group without late success', {
+  skip: process.platform === 'win32',
+},async()=>{
+  const controller=new AbortController();
+  const adapter=owner('tree-hang',{deadlineMs:700,maxConcurrent:1});
+  await grant(adapter,controller.signal);
+  const work=adapter.readStatus({signal:controller.signal});
+  assert.equal(adapter.activeCount(),1);
+  // Allow the fixed code to begin its descendant phase before aborting.
+  await delay(160);
+  controller.abort();
+  await assert.rejects(work,/isolated fixture unavailable/);
+  for(let n=0;n<100 && adapter.activeCount();n++)await delay(10);
+  assert.equal(adapter.activeCount(),0,
+    'Abort must terminate all descendants holding inherited child resources');
+  assert.equal(adapter.launchesInWindow(),1);
+});

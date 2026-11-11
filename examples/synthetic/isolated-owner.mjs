@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const childPath = fileURLToPath(new URL('./isolated-owner-child.mjs', import.meta.url));
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-const modes = new Set(['ok', 'degraded', 'hang', 'crash', 'oversize', 'late']);
+const modes = new Set(['ok', 'degraded', 'hang', 'tree-hang', 'crash', 'oversize', 'late']);
 const FIXTURE_OWNER = 'fixture.alpha';
 const FIXTURE_CAPABILITY = 'fixture.alpha.status';
 const ACTOR_ID = /^[a-z][a-z0-9.-]{1,63}$/;
@@ -65,7 +65,9 @@ function checkedOwnFixtureCapability(value) {
 
 export function createIsolatedSyntheticOwner(options) {
   const c = fields(options, ['mode', 'permit', 'deadlineMs', 'maxConcurrent']);
-  if (!c || !modes.has(c.mode) || typeof c.permit !== 'function' ||
+  if (!c || !modes.has(c.mode) ||
+      (c.mode === 'tree-hang' && process.platform === 'win32') ||
+      typeof c.permit !== 'function' ||
       !Number.isInteger(c.deadlineMs) || c.deadlineMs < 20 || c.deadlineMs > 1000 ||
       !Number.isInteger(c.maxConcurrent) || c.maxConcurrent < 1 || c.maxConcurrent > 4) {
     throw new TypeError('invalid isolated fixture configuration');
@@ -173,8 +175,20 @@ export function createIsolatedSyntheticOwner(options) {
           else reject(unavailable());
         };
         const kill = () => {
-          if (child && child.exitCode === null && child.signalCode === null) {
-            try { child.kill('SIGKILL'); } catch { /* fail closed */ }
+          // An isolated fixture may have spawned descendants inheriting its
+          // stdout pipe. Killing only the direct child can leave those alive,
+          // holding the OS lease open indefinitely after caller timeout.
+          // On POSIX, detached spawn creates a private process group owned
+          // by this fixed-code child. Signal that group before failing closed.
+          if (child && !released) {
+            if (process.platform !== 'win32' && Number.isSafeInteger(child.pid) && child.pid > 0) {
+              try { process.kill(-child.pid, 'SIGKILL'); }
+              catch {
+                try { child.kill('SIGKILL'); } catch { /* fail closed */ }
+              }
+            } else if (child.exitCode === null && child.signalCode === null) {
+              try { child.kill('SIGKILL'); } catch { /* fail closed */ }
+            }
           }
           finish(null); // Caller cannot trust a timed-out child.
         };
@@ -182,6 +196,7 @@ export function createIsolatedSyntheticOwner(options) {
         try {
           child = spawn(process.execPath, [childPath, mode], {
             shell: false,
+            detached: process.platform !== 'win32',
             env: { MESH_SYNTHETIC_CHILD: '1' }, // never pass inherited secrets
             stdio: ['ignore', 'pipe', 'ignore'],
           });
