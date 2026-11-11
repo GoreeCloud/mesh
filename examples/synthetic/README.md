@@ -43,6 +43,8 @@ Validation: `npm test` includes `evidence.test.mjs` alongside the existing synth
 
 The fixed-code subprocess adapter now exposes an idempotent `shutdown()` method. Once invoked, the adapter denies new authorizations and reads, invalidates late resolutions of previously pending owner-policy callbacks, and signals all currently tracked child leases to terminate. Their in-flight capacity remains charged until the operating system emits each child `close` event; shutdown completion is not evidence that child processes already exited. Existing POSIX process-group cleanup also covers the fixture's deliberately attached descendants. This is useful to test application teardown and avoid orphaned synthetic operations in this one Node process.
 
+A caller that needs explicit teardown acknowledgment may use `await owner.shutdownAndWait(timeoutMs = 2000)` (accepted integer 1–5000 ms). It marks the owner stopped, signals tracked children, and resolves `true` only after every associated OS child `close` lease has released. Several callers may await the same close sequence. A wait deadline rejects with the same generic unavailable error **without releasing live capacity or falsely claiming process termination**; a later bounded call may check again. Invalid timeout arguments throw before stopping the adapter. This API does not monitor work across separate Node processes.
+
 This is not an automatic restart supervisor or a durable cancellation/cleanup acknowledgment API. It does not kill arbitrary code outside the trusted fixed-code worker group, enforce OS security isolation, revoke production credentials, or provide backup and recovery. No production connector or service uses this fixture.
 
 ## POSIX fixed-code process-group cleanup (development test)
