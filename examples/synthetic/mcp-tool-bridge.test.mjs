@@ -118,3 +118,25 @@ test('synthetic bridge refuses undeclared registration metadata and sparse disco
   const sparse=new Array(2);sparse[0]={...catalog[0]};
   assert.throws(()=>createSyntheticMcpToolBridge({discover:()=>sparse,read:harness.read},options),TypeError);
 });
+
+test('mistaken asynchronous host actor resolver is denied and rejection consumed',async()=>{
+  const { harness, events }=source();
+  const resolverError='private principal rejection must remain invisible';
+  const rejected=createSyntheticMcpToolBridge(harness,{
+    resolveActor:()=>Promise.reject(new Error(resolverError)),
+  });
+  const name=rejected.listTools()[0].name;
+  const result=await rejected.callTool(name,{}, {authenticatedActor:'fixture.reader'});
+  assert.equal(result.isError,true);
+  assert.equal(result.content[0].text,'Capability unavailable.');
+  assert.doesNotMatch(JSON.stringify(result),/private principal/);
+  assert.equal(events.length,0,'Owner must not run for asynchronous identity');
+  // Allow the rejection microtask and next event-loop turn to surface a leak.
+  await new Promise(resolve=>setImmediate(resolve));
+  const resolved=createSyntheticMcpToolBridge(harness,{
+    resolveActor:()=>Promise.resolve('fixture.reader'),
+  });
+  const denied=await resolved.callTool(name,{}, {authenticatedActor:'fixture.reader'});
+  assert.equal(denied.isError,true,'Even resolved async identities are never authoritative');
+  assert.equal(events.length,0);
+});
