@@ -1,0 +1,78 @@
+name: Source-pinned Calendar task preflight response contract (synthetic only)
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  calendar-vtodo-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Mesh without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Checkout reviewed immutable Calendar preflight source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/calendar
+          ref: 49ba88b9fc81bc73ea42033bcd11a37df2bab629
+          path: calendar-source
+          persist-credentials: false
+      - name: Checkout immutable GoreeCloud Tasks VTODO serializer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/tasks
+          ref: 16db6bfa554d5113a24861470f2203f94317e3a5
+          path: tasks-source
+          persist-credentials: false
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Setup Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Check source SHA, content blobs and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C calendar-source rev-parse HEAD)" = '49ba88b9fc81bc73ea42033bcd11a37df2bab629'
+          test "$(git -C calendar-source hash-object calendar_app/core.py)" = 'f421b8eeae7eb731aba48a4091a81b952903a384'
+          test "$(git -C calendar-source hash-object calendar_app/vtodo.py)" = 'bc56faf45dea5184b25e71eab72406e4b5677b0f'
+          python3 -m py_compile calendar-source/calendar_app/core.py calendar-source/calendar_app/vtodo.py
+          test "$(git -C tasks-source rev-parse HEAD)" = '16db6bfa554d5113a24861470f2203f94317e3a5'
+          test "$(git -C tasks-source hash-object server/vtodo_export.py)" = 'f74411449fb5f4b87f98099e1bc425e3cbf428b8'
+          python3 -m py_compile tasks-source/server/vtodo_export.py
+          python3 -m py_compile examples/owner-contracts/calendar-vtodo-preflight-tasks-fixture.py
+          node --check examples/owner-contracts/calendar-vtodo-preflight.mjs
+          node --check examples/owner-contracts/calendar-vtodo-preflight-source.smoke.mjs
+      - name: Source Calendar authenticated non-mutation and rejection test
+        env:
+          PYTHONNOUSERSITE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          cd calendar-source
+          python3 -m unittest tests.test_api.CalendarAPITests.test_tasks_preflight_is_redacted_permissioned_and_non_mutating -v
+      - name: Strict Mesh output-only parser tests
+        run: node --test examples/owner-contracts/calendar-vtodo-preflight.test.mjs
+      - name: Generate only synthetic VTODO bytes using pinned Tasks source
+        env:
+          PYTHONNOUSERSITE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 examples/owner-contracts/calendar-vtodo-preflight-tasks-fixture.py ./tasks-source/server > fixture-vtodo.ics
+          test "$(wc -c < fixture-vtodo.ics)" -le 8192
+      - name: Real isolated Calendar owner HTTP response contract
+        env:
+          GC_MESH_CALENDAR_PREVIEW_FIXTURE: '1'
+          PYTHONNOUSERSITE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: node examples/owner-contracts/calendar-vtodo-preflight-source.smoke.mjs ./calendar-source ./fixture-vtodo.ics
+      - name: Erase synthetic CI fixture after verification
+        if: always()
+        run: rm -f -- fixture-vtodo.ics
