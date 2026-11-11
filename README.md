@@ -24,6 +24,8 @@
 
 **Process deadline fixture:** [Fixed-code isolated synthetic owner](examples/synthetic/README.md) demonstrates a private Node child process with strictly bounded concurrent subprocesses, output and deadlines. Stalled or crashing child work can be forcibly terminated and capacity is retained until actual process closure. **Not an OS sandbox** or a deployable multi-tenant owner runtime; see [worker isolation issue #34](https://github.com/GoreeCloud/mesh/issues/34).
 
+A [restricted modern stateless JSON-RPC request fixture](docs/mcp-modern-stateless-fixture.md) extends the synthetic bridge with 2026-07-28 request metadata, discovery, read-only tool listing and invocation, host-injected admission and fail-closed negative tests. It has no transport, OAuth, real user data or external-client compatibility evidence. Draft legacy MCP PR #61 remains independent and requires reconciliation.
+
 ## Experimental MCP-shaped read-only tool bridge
 
 The new [in-process synthetic MCP-shaped tool bridge](docs/mcp-synthetic-tool-bridge.md) maps Mesh's existing fictional read-only status capabilities into deterministic tool descriptors and fail-closed calls, without accepting model-supplied actor identities. It is not an MCP transport or a deployed endpoint; compatibility with external AI clients is **unverified**. The latest protocol revision considered is 2026-07-28, and transport/authorization remains a separate acceptance gate.
