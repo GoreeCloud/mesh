@@ -486,3 +486,27 @@ test('flat read-only host claims are accepted without trusting model-supplied ac
   assert.equal(result.result.isError,false);
   assert.equal(JSON.parse(result.result.content[0].text).environment,'synthetic-local-only');
 });
+
+test('synthetic MCP output enforces UTF-8 bytes, not JavaScript code units',async()=>{
+  let text='é'.repeat(2048); // exactly 4096 UTF-8 bytes, 2048 JS units
+  const bridge={
+    listTools(){return[];},
+    async callTool(){return {content:[{type:'text',text}]};},
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{isAuthenticated:()=>true});
+  const call=()=>server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),authorized);
+  const atLimit=await call();
+  assert.equal(atLimit.result.content[0].text,text);
+  assert.equal(atLimit.result.isError,false);
+  text+='é'; // 4098 bytes but still well below 4096 JS characters
+  const tooLarge=await call();
+  assert.equal(tooLarge.error.code,-32000);
+  assert.equal(tooLarge.error.message,'Capability unavailable');
+  assert.equal(JSON.stringify(tooLarge).includes('é'),false);
+  text='🙂'.repeat(1200); // 4800 bytes, 2400 JS units
+  const astral=await call();
+  assert.equal(astral.error.code,-32000);
+  assert.equal(JSON.stringify(astral).includes('🙂'),false);
+});
