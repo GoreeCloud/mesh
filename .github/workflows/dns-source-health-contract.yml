@@ -1,0 +1,44 @@
+name: Pinned GoreeCloud DNS client-health and Mesh contract (isolated)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  dns-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Mesh without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Checkout exact reviewed first-party DNS source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/DNS
+          ref: 9bde4884363b79703d76f130e8db0d6625d42884
+          path: dns-source
+          persist-credentials: false
+      - name: Setup Node 24 for synthetic boundary tests
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify immutable DNS health endpoint source and API documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C dns-source rev-parse HEAD)" = '9bde4884363b79703d76f130e8db0d6625d42884'
+          test "$(git -C dns-source hash-object DnsServerCore/WebServiceApi.cs)" = '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40'
+          test "$(git -C dns-source hash-object APIDOCS.md)" = 'fb1e769a04fc00e384189cee9f417532a4c75a22'
+          grep -Fq 'MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync)' dns-source/DnsServerCore/DnsWebService.cs
+          grep -Fq 'public async Task HealthCheckAsync(HttpContext context)' dns-source/DnsServerCore/WebServiceApi.cs
+          grep -Fq 'DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN))' dns-source/DnsServerCore/WebServiceApi.cs
+          grep -Fq 'DnsClient: View' dns-source/APIDOCS.md
+          grep -Fq '/api/dnsClient/healthCheck' dns-source/APIDOCS.md
+      - name: Validate default-deny minimal DNS projection against source-pinned fixture
+        shell: bash
+        env:
+          NODE_ENV: test
+        run: node --test examples/owner-contracts/dns-health.test.mjs
