@@ -103,6 +103,25 @@ function safeToolCatalog(raw) {
   }
 }
 
+// Read only inert own-data tool results. Accessor-backed or exotic owner
+// outputs must never run a getter as an accidental side effect of projection.
+function safeToolResult(raw) {
+  try {
+    const outer = record(raw, ['content', 'isError'], ['content']);
+    if (!outer || (Object.prototype.hasOwnProperty.call(outer, 'isError') &&
+        typeof outer.isError !== 'boolean')) return null;
+    const content = outer.content;
+    if (!Array.isArray(content) || Object.getPrototypeOf(content) !== Array.prototype) return null;
+    const entries = Object.getOwnPropertyDescriptors(content);
+    if (entries.length?.value !== 1 || Reflect.ownKeys(content).length !== 2 ||
+        !Object.prototype.hasOwnProperty.call(entries['0'] ?? {}, 'value')) return null;
+    const element = record(entries['0'].value, ['type', 'text'], ['type', 'text']);
+    if (!element || element.type !== 'text' || typeof element.text !== 'string' ||
+        element.text.length > 4096) return null;
+    return { content: [{ type: 'text', text: element.text }], isError: outer.isError === true };
+  } catch { return null; }
+}
+
 /** Host must supply a previously authenticated context and independent permit. */
 export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // The host registration is a security boundary: do not evaluate getters,
@@ -193,16 +212,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           } finally {
             clearTimeout(timer);
           }
-          if (!result || !Array.isArray(result.content) || result.content.length !== 1 ||
-              result.content[0]?.type !== 'text' ||
-              typeof result.content[0].text !== 'string' ||
-              result.content[0].text.length > 4096) {
-            return rpcError(rpc.id, -32000, 'Capability unavailable');
-          }
-          return reply(rpc.id, {
-            resultType: 'complete', content: [{ type: 'text', text: result.content[0].text }],
-            isError: result.isError === true,
-          });
+          const output = safeToolResult(result);
+          if (!output) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          return reply(rpc.id, { resultType: 'complete', ...output });
         }
         return rpcError(rpc.id, -32601, 'Method not found');
       } catch {
