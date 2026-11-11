@@ -26,3 +26,7 @@ subsequent mutation of the caller's registration objects cannot silently replace
 them. Proxy/owner exceptions fail closed. The identity and permission source
 remains the trusted host; this is neither a production sandbox nor external MCP
 authentication, authorization, or client certification.
+
+## Synchronous synthetic actor resolution
+
+A trusted host must supply a synchronous resolver returning a string actor. If the callback accidentally returns a Promise or thenable, the bridge denies the read without running the owner and consumes eventual rejection so the fixture process is not interrupted by an unhandled rejection. This is a fail-closed local fixture behavior, not authentication or a production identity lifecycle.
