@@ -116,8 +116,10 @@ function safeToolResult(raw) {
     if (entries.length?.value !== 1 || Reflect.ownKeys(content).length !== 2 ||
         !Object.prototype.hasOwnProperty.call(entries['0'] ?? {}, 'value')) return null;
     const element = record(entries['0'].value, ['type', 'text'], ['type', 'text']);
+    // An ASCII-only JS character count is not a transport byte budget:
+    // non-ASCII text can be substantially larger on the UTF-8 wire.
     if (!element || element.type !== 'text' || typeof element.text !== 'string' ||
-        element.text.length > 4096) return null;
+        Buffer.byteLength(element.text, 'utf8') > 4096) return null;
     return { content: [{ type: 'text', text: element.text }], isError: outer.isError === true };
   } catch { return null; }
 }
