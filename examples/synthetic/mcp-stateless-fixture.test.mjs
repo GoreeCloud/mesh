@@ -184,3 +184,21 @@ test('synthetic dispatcher rejects invalid concurrency, timeout and async authen
   const server=createSyntheticStatelessMcpDispatcher(bridge,{isAuthenticated:async()=>true});
   assert.equal((await server.dispatch(request('tools/list'),authorized)).error.code,-32000);
 });
+
+
+test('rejected asynchronous host authentication is refused without unhandled owner work', async()=>{
+  let calls=0;
+  const bridge={
+    listTools(){return[]},
+    async callTool(){calls++;return {content:[{type:'text',text:'ok'}]};},
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated:()=>Promise.reject(new Error('hidden callback failure')),
+  });
+  const rejected=await server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),authorized);
+  assert.equal(rejected.error.code,-32000);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,0);
+});
