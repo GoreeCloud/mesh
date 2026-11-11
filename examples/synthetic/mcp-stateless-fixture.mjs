@@ -122,6 +122,32 @@ function safeToolResult(raw) {
   } catch { return null; }
 }
 
+// The host context is an identity/authorization input. Capture its inert,
+// bounded values BEFORE synchronous authentication and the deferred owner call,
+// so caller-side mutation or accessor properties cannot swap the actor between
+// admission and execution. This fixture deliberately accepts scalar context
+// attributes only; production Identity claims require a separate verified type.
+function snapshotHostContext(raw) {
+  try {
+    if (raw === undefined) return Object.freeze(Object.create(null));
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const names = Reflect.ownKeys(raw);
+    if (names.length > 16 || names.some(name =>
+        typeof name !== 'string' || !/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(name) ||
+        ['constructor', 'prototype', '__proto__'].includes(name))) return null;
+    const data = record(raw, names);
+    if (!data) return null;
+    for (const name of names) {
+      const value = data[name];
+      if (value === null || typeof value === 'boolean') continue;
+      if (typeof value === 'string' && value.length <= 256) continue;
+      if (typeof value === 'number' && Number.isSafeInteger(value)) continue;
+      return null; // no nested objects, functions, symbols or async principals
+    }
+    return Object.freeze(data);
+  } catch { return null; }
+}
+
 /** Host must supply a previously authenticated context and independent permit. */
 export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // The host registration is a security boundary: do not evaluate getters,
@@ -154,10 +180,14 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           typeof rpc.method !== 'string') return rpcError(null, -32600, 'Invalid request');
       const params = record(rpc.params, ['_meta', 'name', 'arguments'], ['_meta']);
       if (!params || !validMeta(params._meta)) return rpcError(rpc.id, -32602, 'Invalid params');
+      // Snapshot before authorization; do not give the owner mutable caller
+      // context after a synchronous host decision has already granted entry.
+      const host = snapshotHostContext(trustedContext);
+      if (!host) return rpcError(rpc.id, -32000, 'Capability unavailable');
       // The protocol envelope's client identity is explicitly NOT authentication.
       let authenticated = false;
       try {
-        const decision = isAuthenticated(trustedContext);
+        const decision = isAuthenticated(host);
         if (decision && typeof decision.then === 'function') {
           // Asynchronous decisions do not confer permissions. Consume eventual
           // rejection so a mistaken host callback cannot crash the process.
@@ -199,7 +229,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // Catch owner failures, and hold admission until work REALLY settles.
           // Promise.race limits the waiting caller, not the untrusted execution.
           const operation = Promise.resolve()
-            .then(() => Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, trustedContext]))
+            .then(() => Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, host]))
             .catch(() => null)
             .finally(() => { inFlight -= 1; });
           let timer;

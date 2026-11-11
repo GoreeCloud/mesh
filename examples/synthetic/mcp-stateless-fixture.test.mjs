@@ -404,3 +404,85 @@ test('valid optional owner error flag is copied without reference to original re
   result.content[0].text='modified after reply';
   assert.equal(got.result.content[0].text,'Local fixture unavailable.');
 });
+
+
+test('authenticated host identity is immutable from admission until deferred owner work',async()=>{
+  let ownerActor;
+  let authActor;
+  const bridge={
+    listTools(){return[]},
+    async callTool(_name,_args,context){
+      ownerActor=context.actor;
+      assert.equal(Object.getPrototypeOf(context),null);
+      assert.equal(Object.isFrozen(context),true);
+      return {content:[{type:'text',text:'synthetic'}]};
+    },
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated:context=>{
+      authActor=context.actor;
+      assert.equal(Object.isFrozen(context),true);
+      return context.authenticated===true;
+    },
+  });
+  const context={authenticated:true,actor:'fixture.reader',agent:'mock.alpha'};
+  const pending=server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),context);
+  context.actor='fixture.stranger';
+  context.authenticated=false;
+  context.agent='mutated';
+  const result=await pending;
+  assert.equal(result.result.content[0].text,'synthetic');
+  assert.equal(authActor,'fixture.reader');
+  assert.equal(ownerActor,'fixture.reader',
+    'Owner must see the same identity snapshot that authentication approved');
+});
+
+test('synthetic host context refuses accessors, nested objects, oversized claims and hostile proxies',async()=>{
+  let getters=0,authCalls=0,ownerCalls=0;
+  const bridge={
+    listTools(){return[]},
+    async callTool(){ownerCalls++;return {content:[{type:'text',text:'never'}]};},
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated(){authCalls++;return true;},
+  });
+  const accessor=Object.defineProperty({authenticated:true},'actor',{
+    get(){getters++;throw Error('private principal getter')},
+  });
+  const proxy=new Proxy({authenticated:true},{
+    ownKeys(){throw Error('private principal proxy')}
+  });
+  const tooMany=Object.fromEntries(Array.from({length:17},(_,i)=>['field'+i,true]));
+  for(const context of [
+    accessor,proxy,null,42,'authenticated',
+    {authenticated:true,actor:{id:'fixture.reader'}},
+    {authenticated:true,actor:'x'.repeat(257)},
+    {authenticated:true,score:Infinity},
+    {authenticated:true,admin:()=>true},
+    {authenticated:true,[Symbol('owner')]:'fixture.reader'},
+    tooMany,
+  ]) {
+    const result=await server.dispatch(request('tools/call',{
+      name:'mesh__fixture_alpha_status__status_read',arguments:{},
+    }),context);
+    assert.equal(result.error.code,-32000,'Host context should be denied');
+    assert.equal(result.error.message,'Capability unavailable');
+    assert.doesNotMatch(JSON.stringify(result),/private|principal getter/);
+  }
+  assert.equal(getters,0,'Host context inspection must not evaluate getter');
+  assert.equal(authCalls,0,'Malformed host identity must be denied before auth');
+  assert.equal(ownerCalls,0,'Malformed host identity must never reach owner');
+});
+
+test('flat read-only host claims are accepted without trusting model-supplied actor fields',async()=>{
+  const server=fixture();
+  const context={authenticated:true,actor:'fixture.reader',agent:'test-client',tenantId:7,
+    displayName:null,strict:true};
+  const result=await server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),context);
+  assert.equal(result.result.isError,false);
+  assert.equal(JSON.parse(result.result.content[0].text).environment,'synthetic-local-only');
+});
