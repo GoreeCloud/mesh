@@ -120,3 +120,67 @@ test('reject incomplete fixtures rather than silently creating an unauthenticate
   assert.throws(()=>createSyntheticStatelessMcpDispatcher(null),TypeError);
   assert.throws(()=>createSyntheticStatelessMcpDispatcher({listTools(){},callTool(){} }),TypeError);
 });
+
+
+test('synthetic MCP admission refuses calls beyond configured in-flight capacity', async () => {
+  let release;
+  let calls = 0;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() { return []; },
+    async callTool() {
+      calls += 1;
+      await waiting;
+      return {content:[{type:'text',text:'{"ok":true}'}]};
+    },
+  }, {isAuthenticated:()=>true,maxConcurrentCalls:1,callTimeoutMs:1000});
+  const name = 'mesh__fixture_alpha_status__status_read';
+  const first = server.dispatch(request('tools/call',{name,arguments:{}}), authorized);
+  await Promise.resolve();
+  await Promise.resolve();
+  const excess = await server.dispatch(request('tools/call',{name,arguments:{}}), authorized);
+  assert.equal(excess.error.code, -32000);
+  assert.equal(calls,1, 'Second synthetic owner read must not be admitted');
+  release();
+  const result = await first;
+  assert.equal(result.result.isError,false);
+  assert.equal(result.result.content[0].text,'{"ok":true}');
+  const next = await server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  assert.equal(next.result.isError,false);
+  assert.equal(calls,2);
+});
+
+test('timed-out synthetic MCP callers retain admission slots until owner really settles', async () => {
+  let release;
+  let calls = 0;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() { return []; },
+    async callTool() {
+      calls += 1;
+      await waiting;
+      return {content:[{type:'text',text:'finished'}]};
+    },
+  },{isAuthenticated:()=>true,maxConcurrentCalls:1,callTimeoutMs:15});
+  const name = 'mesh__fixture_alpha_status__status_read';
+  const expired = await server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  assert.equal(expired.error.code,-32000);
+  const rejected = await server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  assert.equal(rejected.error.code,-32000);
+  assert.equal(calls,1,'Timed-out caller must not free still-running owner slot');
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  const recovered = await server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  assert.equal(recovered.result.isError,false);
+  assert.equal(calls,2);
+});
+
+test('synthetic dispatcher rejects invalid concurrency, timeout and async authentication',async()=>{
+  const bridge={listTools(){return[]},async callTool(){return {content:[{type:'text',text:'ok'}]}}};
+  for(const config of [
+    {maxConcurrentCalls:0},{maxConcurrentCalls:17},{maxConcurrentCalls:1.2},
+    {callTimeoutMs:0},{callTimeoutMs:30001},{callTimeoutMs:NaN},
+  ]) assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,{isAuthenticated:()=>true,...config}),RangeError);
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{isAuthenticated:async()=>true});
+  assert.equal((await server.dispatch(request('tools/list'),authorized)).error.code,-32000);
+});
