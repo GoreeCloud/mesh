@@ -17,9 +17,17 @@ The root npm test automatically includes examples/synthetic/mcp-stateless-fixtur
 
 Tested scenarios include two trusted mock host contexts, stateless discovery/list/call, anonymous refusal before list or execution, denied owners, mutation arguments, injected actor claims, malformed requests, inaccessible/failed owners, getter/proxy input rejection, saturation denial, timeout admission retention and invalid limit rejection.
 
+## Trusted-host registration integrity
+
+The constructor snapshots exact own-data `listTools` and `callTool` methods and exact own-data authentication/concurrency settings, rejecting accessor-backed, proxy-failing, unexpected or incomplete registration objects. Later mutation of a host callback cannot substitute tool enumeration, owner invocation or the authentication function. The host remains responsible for supplying a trustworthy identity; this does **not** verify an Identity token. Synthetic catalogs also validate an inert, canonical array descriptor rather than reading a potentially hostile `length` property.
+
 ## Client-visible synthetic tool metadata boundary
 
 After host authentication, `tools/list` now validates and snapshots a fixed maximum of 32 read-only status descriptors from the injected bridge. Only bounded name/title/description fields and empty-input schema with explicit `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false` are accepted. Duplicate tool names, unknown fields, accessor-backed data, sparse/oversized arrays, mutation-capable declarations and malformed catalog objects fail closed with a generic error. Returned descriptors are detached copies, not references into a host registry. This is **defense-in-depth for synthetic metadata**, not permission-aware production discovery; per-user tool visibility, durable audit, identity and consent enforcement are still missing.
+
+## Strict owner result projection
+
+After an admitted synthetic `tools/call`, the dispatcher also snapshots an exact own-data owner result with one plain-text content item and an optional boolean `isError`. Accessor fields, unexpected keys, noncanonical/sparse arrays, exotic content types and oversized text fail closed with a generic error. Tool result bodies are copied before returning to the client, so post-response owner mutation does not modify the captured reply. The owner remains responsible for its own redaction and authorization; this check cannot prove a returned string is non-sensitive.
 
 ## Security and compatibility boundary
 
