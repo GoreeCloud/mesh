@@ -36,7 +36,7 @@ export function createExactHealthFixtureAdapter(options, contract) {
   if (!fields || !source || typeof fields.transport !== 'function' ||
       (own(fields, 'permit') && typeof fields.permit !== 'function') ||
       (own(fields, 'clock') && typeof fields.clock !== 'function') ||
-      !['/healthz', '/api/v1/health', '/api/health'].includes(source.path) ||
+      !['/healthz', '/readyz', '/api/v1/health', '/api/health'].includes(source.path) ||
       !['application/json', 'application/json; charset=utf-8'].includes(expectedContentType) ||
       typeof source.body !== 'string' || source.body.length > 128 ||
       Buffer.byteLength(source.body, 'utf8') > 128) {
