@@ -115,6 +115,34 @@ test('invalid, unexpected and oversized owner responses fail closed', async () =
   assert.equal((await read(capped)).error.code, 'invalid_response');
 });
 
+test('opt-in health freshness rejects stale and future fixture observations', async () => {
+  const now = new Date().toISOString();
+  const recent = harness({
+    maxStatusAgeMs: 60000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => ({ state: 'ok', observed_at: now }),
+    }) },
+  });
+  assert.equal((await read(recent)).ok, true);
+  for (const observed_at of [
+    new Date(Date.now() - 120000).toISOString(),
+    new Date(Date.now() + 120000).toISOString(),
+  ]) {
+    const stale = harness({
+      maxStatusAgeMs: 60000,
+      adapters: { [capabilityId]: fixtureAdapter({
+        readStatus: async () => ({ state: 'ok', observed_at }),
+      }) },
+    });
+    assert.equal((await read(stale)).error.code, 'invalid_response');
+  }
+  // Existing fixture contracts retain their legacy behavior unless enabled.
+  assert.equal((await read(harness())).ok, true);
+  for (const maxStatusAgeMs of [0, 999, -1, 86400001, 1.5, '60000', Infinity]) {
+    assert.throws(() => harness({ maxStatusAgeMs }), TypeError);
+  }
+});
+
 test('hung owner decisions and reads have bounded typed timeouts', async () => {
   const never = () => new Promise(() => {});
   const auth = harness({ timeoutMs: 15, meshPermit: never });
