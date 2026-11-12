@@ -157,7 +157,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   const methods = record(bridge, ['listTools', 'callTool'], ['listTools', 'callTool']);
   const settings = record(options, [
     'isAuthenticated', 'isToolAuthorized', 'maxConcurrentCalls', 'maxConcurrentPerActor',
-    'maxCallsPerActorWindow', 'actorWindowMs', 'callTimeoutMs',
+    'maxConcurrentPerTool', 'maxCallsPerActorWindow', 'actorWindowMs', 'callTimeoutMs',
   ], ['isAuthenticated']);
   if (!methods || !settings || typeof methods.listTools !== 'function' ||
       typeof methods.callTool !== 'function' ||
@@ -200,6 +200,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // Optional local fairness constraint. A trusted host MUST bind actor to a
   // verified principal; model-provided clientInfo never chooses a quota key.
   const maxConcurrentPerActor = settings.maxConcurrentPerActor;
+  // Optional per-tool admission prevents one hung synthetic owner from
+  // consuming every slot available to independent owner reads.
+  const maxConcurrentPerTool = settings.maxConcurrentPerTool;
   // Optional fixed-window quota for admitted synthetic reads. Unlike a
   // concurrency cap, this limits fast sequential calls from the same actor.
   const maxCallsPerActorWindow = settings.maxCallsPerActorWindow;
@@ -211,6 +214,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
       (maxConcurrentPerActor !== undefined &&
         (!Number.isInteger(maxConcurrentPerActor) || maxConcurrentPerActor < 1 ||
          maxConcurrentPerActor > maxConcurrentCalls)) ||
+      (maxConcurrentPerTool !== undefined &&
+        (!Number.isInteger(maxConcurrentPerTool) || maxConcurrentPerTool < 1 ||
+         maxConcurrentPerTool > maxConcurrentCalls)) ||
       (maxCallsPerActorWindow !== undefined &&
         (!Number.isInteger(maxCallsPerActorWindow) || maxCallsPerActorWindow < 1 ||
          maxCallsPerActorWindow > 64)) ||
@@ -223,6 +229,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // promise settling can do so, preventing runaway work after a timeout.
   let inFlight = 0;
   const byActor = new Map(); // bounded by global admitted workers, not remote claims
+  const byTool = new Map(); // at most maxConcurrentCalls <=16 active entries
   const actorWindows = new Map();
   const maxTrackedActors = 128; // bounded memory, even for rapidly rotating actors
   return Object.freeze({
@@ -285,7 +292,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           }
           if (inFlight >= maxConcurrentCalls ||
               (maxConcurrentPerActor !== undefined &&
-               (byActor.get(actor) ?? 0) >= maxConcurrentPerActor)) {
+               (byActor.get(actor) ?? 0) >= maxConcurrentPerActor) ||
+              (maxConcurrentPerTool !== undefined &&
+               (byTool.get(params.name) ?? 0) >= maxConcurrentPerTool)) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
           }
           if (maxCallsPerActorWindow !== undefined) {
@@ -308,6 +317,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           if (maxConcurrentPerActor !== undefined) {
             byActor.set(actor, (byActor.get(actor) ?? 0) + 1);
           }
+          if (maxConcurrentPerTool !== undefined) {
+            byTool.set(params.name, (byTool.get(params.name) ?? 0) + 1);
+          }
           // Timeout never frees global OR per-actor capacity until the owner
           // promise settles. Delete idle actor entries to bound retained keys.
           const operation = Promise.resolve()
@@ -325,6 +337,11 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
                 const remaining = (byActor.get(actor) ?? 1) - 1;
                 if (remaining === 0) byActor.delete(actor);
                 else byActor.set(actor, remaining);
+              }
+              if (maxConcurrentPerTool !== undefined) {
+                const remaining = (byTool.get(params.name) ?? 1) - 1;
+                if (remaining === 0) byTool.delete(params.name);
+                else byTool.set(params.name, remaining);
               }
             });
           let timer;
