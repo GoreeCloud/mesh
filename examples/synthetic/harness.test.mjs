@@ -525,6 +525,68 @@ test('late rejected noncooperative owner read is consumed and frees the slot', a
   assert.equal(calls, 2);
 });
 
+test('per-actor fairness rejects excess same-actor work while admitting other actors', async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 2,
+    maxConcurrentPerActor: 1,
+    timeoutMs: 1000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => {
+        calls++;
+        if (calls === 1) { entered(); await held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal((await read(h, 'fixture.other')).ok, true);
+  assert.equal(calls, 2, 'denied actor cannot start a second owner read');
+  release();
+  assert.equal((await first).ok, true);
+  assert.equal((await read(h)).ok, true, 'actor quota releases on settlement');
+});
+
+test('timed-out per-actor quota stays reserved until noncooperative owner settles', async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 2,
+    maxConcurrentPerActor: 1,
+    timeoutMs: 20,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => {
+        calls++;
+        if (calls === 1) { entered(); await held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal(calls, 1);
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true);
+  assert.equal(calls, 2);
+});
+
+test('per-actor admission rejects invalid limits', () => {
+  for (const maxConcurrentPerActor of [0, -1, 1.5, 3, '1', Infinity]) {
+    assert.throws(() => harness({ maxConcurrentReads: 2, maxConcurrentPerActor }), TypeError);
+  }
+  assert.equal(harness({ maxConcurrentPerActor: undefined }).discover().length, 2);
+});
+
 test('native admission rejects out-of-bounds limits while preserving explicit defaults', async () => {
   for (const maxConcurrentReads of [0, -1, 1.5, 33, '8', Infinity]) {
     assert.throws(() => harness({ maxConcurrentReads }), TypeError);
