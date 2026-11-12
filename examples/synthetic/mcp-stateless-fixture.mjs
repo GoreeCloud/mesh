@@ -167,6 +167,19 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
     throw new TypeError('Synthetic bridge and trusted authentication check required');
   }
   const { isAuthenticated, isToolAuthorized } = settings;
+  const authenticatedHost = context => {
+    try {
+      const decision = Reflect.apply(isAuthenticated, undefined, [context]);
+      if (decision && typeof decision.then === 'function') {
+        // A mistaken async callback never grants access or leaves an
+        // unhandled rejection in the local fixture.
+        Promise.resolve(decision).catch(() => {});
+      }
+      return decision === true;
+    } catch {
+      return false;
+    }
+  };
   // This optional synthetic gate is supplied by the trusted host, never
   // through client metadata. Production Identity and consent remain separate.
   const permittedTool = (context, name) => {
@@ -225,17 +238,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
       const host = snapshotHostContext(trustedContext);
       if (!host) return rpcError(rpc.id, -32000, 'Capability unavailable');
       // The protocol envelope's client identity is explicitly NOT authentication.
-      let authenticated = false;
-      try {
-        const decision = isAuthenticated(host);
-        if (decision && typeof decision.then === 'function') {
-          // Asynchronous decisions do not confer permissions. Consume eventual
-          // rejection so a mistaken host callback cannot crash the process.
-          Promise.resolve(decision).catch(() => {});
-        }
-        authenticated = decision === true;
-      } catch { /* default deny */ }
-      if (!authenticated) return rpcError(rpc.id, -32000, 'Capability unavailable');
+      if (!authenticatedHost(host)) return rpcError(rpc.id, -32000, 'Capability unavailable');
       try {
         if (rpc.method === 'server/discover') {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
@@ -308,7 +311,13 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // Timeout never frees global OR per-actor capacity until the owner
           // promise settles. Delete idle actor entries to bound retained keys.
           const operation = Promise.resolve()
-            .then(() => Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, host]))
+            .then(() => {
+              // Recheck immediately before the deferred owner invocation:
+              // permissions can be revoked between initial admission and
+              // this microtask. No stale admission confers ongoing authority.
+              if (!authenticatedHost(host) || !permittedTool(host, params.name)) return null;
+              return Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, host]);
+            })
             .catch(() => null)
             .finally(() => {
               inFlight -= 1;
