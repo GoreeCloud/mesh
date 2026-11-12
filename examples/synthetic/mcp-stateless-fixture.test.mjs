@@ -793,3 +793,73 @@ test('tool policy receives frozen host identity and ignores model-provided actor
   assert.equal(ownerCalls,1);
   assert.equal(policyCalls,3,"Admitted calls recheck policy before invoking owner");
 });
+
+test('revoked synthetic host authentication is rechecked before deferred owner work',async()=>{
+  let permission=true,checks=0,ownerCalls=0;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:'secret'}]};},
+  },{isAuthenticated:()=>{checks++;return permission;}});
+  const req=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const pending=server.dispatch(req,authorized);
+  permission=false; // revoke synchronously before deferred owner microtask
+  const denied=await pending;
+  assert.equal(denied.error.code,-32000);
+  assert.equal(denied.error.message,'Capability unavailable');
+  assert.equal(checks,2);
+  assert.equal(ownerCalls,0,'Stale host admission cannot invoke owner');
+  permission=true;
+  const accepted=await server.dispatch(req,authorized);
+  assert.equal(accepted.result.content[0].text,'secret');
+  assert.equal(ownerCalls,1);
+});
+
+test('revoked synthetic tool permission denies without invoking owner or leaking status',async()=>{
+  let permitted=true,policyChecks=0,ownerCalls=0;
+  const bridge={
+    listTools(){return[];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:'private owner state'}]};},
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated:()=>true,
+    isToolAuthorized:()=>{policyChecks++;return permitted;},
+  });
+  const req=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const pending=server.dispatch(req,authorized);
+  permitted=false;
+  const denied=await pending;
+  assert.equal(denied.error.code,-32000);
+  assert.equal(denied.error.message,'Capability unavailable');
+  assert.doesNotMatch(JSON.stringify(denied),/private owner/);
+  assert.equal(policyChecks,2);
+  assert.equal(ownerCalls,0);
+  permitted=true;
+  const allowed=await server.dispatch(req,authorized);
+  assert.equal(allowed.result.isError,false);
+  assert.equal(ownerCalls,1);
+});
+
+test('async tool-policy rejection on just-in-time recheck fails closed',async()=>{
+  let checks=0,ownerCalls=0;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:'owner'}]};},
+  },{
+    isAuthenticated:()=>true,
+    isToolAuthorized:()=>{
+      checks++;
+      return checks===1 ? true : Promise.reject(Error('private revoked grant'));
+    },
+  });
+  const result=await server.dispatch(request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  }),authorized);
+  assert.equal(result.error.code,-32000);
+  assert.equal(ownerCalls,0);
+  assert.equal(checks,2);
+  await new Promise(resolve=>setImmediate(resolve));
+});
