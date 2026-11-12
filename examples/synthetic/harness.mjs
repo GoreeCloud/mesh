@@ -4,6 +4,11 @@ export const CONTRACT_VERSION = 'mesh.capabilities.v1';
 const ID = /^[a-z][a-z0-9.-]{1,63}$/;
 const STATES = new Set(['ok', 'degraded']);
 const ERRORS = new Set(['unsupported', 'denied', 'unavailable', 'timed_out', 'invalid_response']);
+// One-process limit across independently constructed synthetic harnesses.
+ // Per-instance maxConcurrentReads remains a lower, separately enforced cap.
+ // This is NOT a deployed worker pool or an OS/cgroup resource quota.
+const GLOBAL_MAX_INFLIGHT = 16;
+let globalInFlight = 0;
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 function plain(value) {
@@ -201,12 +206,13 @@ export function createSyntheticHarness(options = {}) {
       }
       if (typeof actor !== 'string' || !ID.test(actor)) return failure('denied');
       // Reserve a slot before any Mesh or owner authorization starts.
-      if (inFlight >= maxConcurrentReads ||
+      if (inFlight >= maxConcurrentReads || globalInFlight >= GLOBAL_MAX_INFLIGHT ||
           (maxConcurrentPerActor !== undefined &&
            (inFlightByActor.get(actor) ?? 0) >= maxConcurrentPerActor)) {
         return failure('unavailable');
       }
       inFlight += 1;
+      globalInFlight += 1;
       if (maxConcurrentPerActor !== undefined) {
         inFlightByActor.set(actor, (inFlightByActor.get(actor) ?? 0) + 1);
       }
@@ -220,6 +226,7 @@ export function createSyntheticHarness(options = {}) {
         if (!released) {
           released = true;
           inFlight -= 1;
+          globalInFlight -= 1;
           if (maxConcurrentPerActor !== undefined) {
             const remaining = (inFlightByActor.get(actor) ?? 1) - 1;
             if (remaining === 0) inFlightByActor.delete(actor);
