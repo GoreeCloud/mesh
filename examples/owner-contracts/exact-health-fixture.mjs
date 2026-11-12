@@ -21,6 +21,33 @@ function snapshot(value, allowed, required = allowed) {
   }
 }
 
+// Caller-supplied context can contain accessor-backed signal properties.
+// Do not destructure it before descriptor validation. These development
+// adapters accept only an ordinary native AbortSignal, if supplied.
+export function readHealthContext(context) {
+  if (context === undefined) return { signal: undefined };
+  const fields = snapshot(context, ['signal'], []);
+  if (!fields) return null;
+  if (!own(fields, 'signal')) return { signal: undefined };
+  const signal = fields.signal;
+  try {
+    if (Object.getPrototypeOf(signal) !== AbortSignal.prototype ||
+        Object.hasOwn(signal, 'aborted') ||
+        typeof Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')?.get?.call(signal) !== 'boolean') {
+      return null;
+    }
+  } catch { return null; }
+  return { signal };
+}
+
+export function healthSignalAborted(signal) {
+  if (signal === undefined) return false;
+  try {
+    const getter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')?.get;
+    return typeof getter !== 'function' || getter.call(signal) !== false;
+  } catch { return true; }
+}
+
 function unavailable() { return new Error('source health unavailable'); }
 
 /**
@@ -47,23 +74,28 @@ export function createExactHealthFixtureAdapter(options, contract) {
   const clock = fields.clock ?? (() => new Date().toISOString());
   const { path, body } = source;
   return Object.freeze({
-    async authorize(actor, capability, { signal } = {}) {
+    async authorize(actor, capability, context) {
+      const fields = readHealthContext(context);
+      if (!fields || healthSignalAborted(fields.signal)) return false;
+      const { signal } = fields;
       try {
-        if (signal?.aborted) return false;
-        return (await permit(actor, capability, { signal })) === true && !signal?.aborted;
+        return (await permit(actor, capability, { signal })) === true &&
+          !healthSignalAborted(signal);
       } catch {
         return false;
       }
     },
-    async readStatus({ signal } = {}) {
-      if (signal?.aborted) throw unavailable();
+    async readStatus(context) {
+      const fields = readHealthContext(context);
+      if (!fields || healthSignalAborted(fields.signal)) throw unavailable();
+      const { signal } = fields;
       let response;
       try {
         response = await transport({ method: 'GET', path, signal });
       } catch {
         throw unavailable();
       }
-      if (signal?.aborted) throw unavailable();
+      if (healthSignalAborted(signal)) throw unavailable();
       const result = snapshot(response, ['status', 'contentType', 'body']);
       if (!result || result.status !== 200 ||
           result.contentType !== expectedContentType ||
