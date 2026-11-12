@@ -82,7 +82,7 @@ function failure(code) {
   return { ok: false, error: { code } };
 }
 
-function snapshotStatus(value, maxResponseBytes) {
+function snapshotStatus(value, maxResponseBytes, maxStatusAgeMs) {
   try {
     if (!plain(value)) return null;
     // Never execute a source-controlled getter, or validate one value and
@@ -95,6 +95,12 @@ function snapshotStatus(value, maxResponseBytes) {
     const parsed = Date.parse(fields.observed_at.value);
     if (!Number.isFinite(parsed) ||
         new Date(parsed).toISOString() !== fields.observed_at.value) return null;
+    // Opt-in freshness gate: stale or future-dated fixture evidence must not
+    // masquerade as a current health observation.
+    if (maxStatusAgeMs !== undefined) {
+      const age = Date.now() - parsed;
+      if (age < 0 || age > maxStatusAgeMs) return null;
+    }
     const snapshot = { state: fields.state.value, observed_at: fields.observed_at.value };
     return Buffer.byteLength(JSON.stringify(snapshot), 'utf8') <= maxResponseBytes ? snapshot : null;
   } catch {
@@ -111,7 +117,7 @@ function snapshotStatus(value, maxResponseBytes) {
 function snapshotOptions(value) {
   try {
     if (!plain(value)) return null;
-    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes', 'maxConcurrentReads']);
+    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes', 'maxConcurrentReads', 'maxStatusAgeMs']);
     const keys = Reflect.ownKeys(value);
     if (keys.some(key => !allowed.has(key))) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -122,6 +128,7 @@ function snapshotOptions(value) {
       timeoutMs: 100,
       maxResponseBytes: 1024,
       maxConcurrentReads: 8,
+      maxStatusAgeMs: undefined,
     };
     for (const key of keys) {
       if (!own(descriptors[key], 'value')) return null;
@@ -137,7 +144,7 @@ function snapshotOptions(value) {
 export function createSyntheticHarness(options = {}) {
   const config = snapshotOptions(options);
   if (!config) throw new TypeError('invalid synthetic harness options');
-  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads } = config;
+  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads, maxStatusAgeMs } = config;
   const inventory = validateManifest(manifest);
   // The registry itself can be an untrusted Proxy. Its getPrototypeOf trap
   // must not leak arbitrary source errors outside the constructor contract.
@@ -150,7 +157,9 @@ export function createSyntheticHarness(options = {}) {
   if (!registryIsPlain || typeof meshPermit !== 'function' ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
       !Number.isInteger(maxResponseBytes) || maxResponseBytes < 32 || maxResponseBytes > 4096 ||
-      !Number.isInteger(maxConcurrentReads) || maxConcurrentReads < 1 || maxConcurrentReads > 32) {
+      !Number.isInteger(maxConcurrentReads) || maxConcurrentReads < 1 || maxConcurrentReads > 32 ||
+      (maxStatusAgeMs !== undefined &&
+       (!Number.isSafeInteger(maxStatusAgeMs) || maxStatusAgeMs < 1000 || maxStatusAgeMs > 86400000))) {
     throw new TypeError('invalid synthetic harness options');
   }
   const byID = new Map(inventory.map(capability => [capability.id, capability]));
@@ -266,7 +275,7 @@ export function createSyntheticHarness(options = {}) {
           if (outcome.kind === 'timeout') return failure('timed_out');
           if (outcome.kind === 'denied') return failure('denied');
           if (outcome.kind !== 'result') return failure('unavailable');
-          const snapshot = snapshotStatus(outcome.value, maxResponseBytes);
+          const snapshot = snapshotStatus(outcome.value, maxResponseBytes, maxStatusAgeMs);
           if (!snapshot) return failure('invalid_response');
           return {
             ok: true,
