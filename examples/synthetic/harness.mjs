@@ -117,7 +117,7 @@ function snapshotStatus(value, maxResponseBytes, maxStatusAgeMs) {
 function snapshotOptions(value) {
   try {
     if (!plain(value)) return null;
-    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes', 'maxConcurrentReads', 'maxStatusAgeMs']);
+    const allowed = new Set(['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes', 'maxConcurrentReads', 'maxConcurrentPerActor', 'maxStatusAgeMs']);
     const keys = Reflect.ownKeys(value);
     if (keys.some(key => !allowed.has(key))) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -128,6 +128,7 @@ function snapshotOptions(value) {
       timeoutMs: 100,
       maxResponseBytes: 1024,
       maxConcurrentReads: 8,
+      maxConcurrentPerActor: undefined,
       maxStatusAgeMs: undefined,
     };
     for (const key of keys) {
@@ -144,7 +145,7 @@ function snapshotOptions(value) {
 export function createSyntheticHarness(options = {}) {
   const config = snapshotOptions(options);
   if (!config) throw new TypeError('invalid synthetic harness options');
-  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads, maxStatusAgeMs } = config;
+  const { manifest, adapters, meshPermit, timeoutMs, maxResponseBytes, maxConcurrentReads, maxConcurrentPerActor, maxStatusAgeMs } = config;
   const inventory = validateManifest(manifest);
   // The registry itself can be an untrusted Proxy. Its getPrototypeOf trap
   // must not leak arbitrary source errors outside the constructor contract.
@@ -158,12 +159,16 @@ export function createSyntheticHarness(options = {}) {
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 1000 ||
       !Number.isInteger(maxResponseBytes) || maxResponseBytes < 32 || maxResponseBytes > 4096 ||
       !Number.isInteger(maxConcurrentReads) || maxConcurrentReads < 1 || maxConcurrentReads > 32 ||
+      (maxConcurrentPerActor !== undefined &&
+       (!Number.isInteger(maxConcurrentPerActor) || maxConcurrentPerActor < 1 ||
+        maxConcurrentPerActor > maxConcurrentReads)) ||
       (maxStatusAgeMs !== undefined &&
        (!Number.isSafeInteger(maxStatusAgeMs) || maxStatusAgeMs < 1000 || maxStatusAgeMs > 86400000))) {
     throw new TypeError('invalid synthetic harness options');
   }
   const byID = new Map(inventory.map(capability => [capability.id, capability]));
   let inFlight = 0;
+  const inFlightByActor = new Map();
   return Object.freeze({
     discover() {
       // Return inert copies; capability presence conveys no permission or health.
@@ -196,8 +201,15 @@ export function createSyntheticHarness(options = {}) {
       }
       if (typeof actor !== 'string' || !ID.test(actor)) return failure('denied');
       // Reserve a slot before any Mesh or owner authorization starts.
-      if (inFlight >= maxConcurrentReads) return failure('unavailable');
+      if (inFlight >= maxConcurrentReads ||
+          (maxConcurrentPerActor !== undefined &&
+           (inFlightByActor.get(actor) ?? 0) >= maxConcurrentPerActor)) {
+        return failure('unavailable');
+      }
       inFlight += 1;
+      if (maxConcurrentPerActor !== undefined) {
+        inFlightByActor.set(actor, (inFlightByActor.get(actor) ?? 0) + 1);
+      }
       // Keep the admission slot until the underlying authorization/read has
       // actually settled, even when its caller has already timed out.
       // Otherwise repeated noncooperative owners can accumulate unbounded
@@ -208,6 +220,11 @@ export function createSyntheticHarness(options = {}) {
         if (!released) {
           released = true;
           inFlight -= 1;
+          if (maxConcurrentPerActor !== undefined) {
+            const remaining = (inFlightByActor.get(actor) ?? 1) - 1;
+            if (remaining === 0) inFlightByActor.delete(actor);
+            else inFlightByActor.set(actor, remaining);
+          }
         }
       };
       try {
