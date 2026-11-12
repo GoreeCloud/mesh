@@ -156,15 +156,33 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
   // accept unexpected configuration, or permit callback replacement midflight.
   const methods = record(bridge, ['listTools', 'callTool'], ['listTools', 'callTool']);
   const settings = record(options, [
-    'isAuthenticated', 'maxConcurrentCalls', 'maxConcurrentPerActor',
+    'isAuthenticated', 'isToolAuthorized', 'maxConcurrentCalls', 'maxConcurrentPerActor',
     'maxCallsPerActorWindow', 'actorWindowMs', 'callTimeoutMs',
   ], ['isAuthenticated']);
   if (!methods || !settings || typeof methods.listTools !== 'function' ||
       typeof methods.callTool !== 'function' ||
-      typeof settings.isAuthenticated !== 'function') {
+      typeof settings.isAuthenticated !== 'function' ||
+      (settings.isToolAuthorized !== undefined &&
+       typeof settings.isToolAuthorized !== 'function')) {
     throw new TypeError('Synthetic bridge and trusted authentication check required');
   }
-  const { isAuthenticated } = settings;
+  const { isAuthenticated, isToolAuthorized } = settings;
+  // This optional synthetic gate is supplied by the trusted host, never
+  // through client metadata. Production Identity and consent remain separate.
+  const permittedTool = (context, name) => {
+    if (isToolAuthorized === undefined) return true;
+    try {
+      const decision = Reflect.apply(isToolAuthorized, undefined, [context, name]);
+      if (decision && typeof decision.then === 'function') {
+        // Mistaken async grants never authorize this request. Consume their
+        // rejections without allowing the owner operation to start.
+        Promise.resolve(decision).catch(() => {});
+      }
+      return decision === true;
+    } catch {
+      return false;
+    }
+  };
   const maxConcurrentCalls = settings.maxConcurrentCalls === undefined ? 4 : settings.maxConcurrentCalls;
   // Optional local fairness constraint. A trusted host MUST bind actor to a
   // verified principal; model-provided clientInfo never chooses a quota key.
@@ -233,7 +251,10 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
           const tools = safeToolCatalog(Reflect.apply(listTools, bridge, []));
           if (!tools) return rpcError(rpc.id, -32000, 'Capability unavailable');
-          return reply(rpc.id, { resultType: 'complete', tools });
+          return reply(rpc.id, {
+            resultType: 'complete',
+            tools: tools.filter(tool => permittedTool(host, tool.name)),
+          });
         }
         if (rpc.method === 'tools/call') {
           if (!Object.prototype.hasOwnProperty.call(params, 'name') ||
@@ -244,6 +265,11 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // Model arguments are never copied into trustedContext.
           if (Object.prototype.hasOwnProperty.call(params, 'arguments') &&
               !record(params.arguments, [])) return rpcError(rpc.id, -32602, 'Invalid params');
+          // Deny before reserving global/per-actor capacity or contacting
+          // the tool owner. A model cannot grant itself visibility by name.
+          if (!permittedTool(host, params.name)) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
           // When per-actor fairness is enabled, reject principals without a
           // bounded host-authenticated key instead of pooling them as "guest".
           const actorQuotaEnabled = maxConcurrentPerActor !== undefined ||
