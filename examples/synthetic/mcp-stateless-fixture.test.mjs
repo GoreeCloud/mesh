@@ -318,7 +318,7 @@ test('post-registration callback mutation cannot swap owner methods or authentic
   }),authorized);
   assert.equal(result.result.content[0].text,'synthetic');
   assert.equal(result.result.isError,false);
-  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,2);
+  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,3);
   assert.equal(swapped,0,'Never trust callbacks changed after registration');
 });
 
@@ -791,5 +791,5 @@ test('tool policy receives frozen host identity and ignores model-provided actor
   const allowed=await server.dispatch(req,claimedActor);
   assert.equal(allowed.result.isError,false);
   assert.equal(ownerCalls,1);
-  assert.equal(policyCalls,2);
+  assert.equal(policyCalls,3,"Admitted calls recheck policy before invoking owner");
 });
