@@ -863,3 +863,82 @@ test('async tool-policy rejection on just-in-time recheck fails closed',async()=
   assert.equal(checks,2);
   await new Promise(resolve=>setImmediate(resolve));
 });
+
+test('per-tool cap preserves independent synthetic owner capacity under saturation',async()=>{
+  const calls=[],alphaName='mesh__fixture_alpha_status__status_read';
+  const betaName='mesh__fixture_beta_status__status_read';
+  let releaseAlpha;
+  const alphaGate=new Promise(resolve=>{releaseAlpha=resolve});
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(name){
+      calls.push(name);
+      return name===alphaName ? alphaGate : {content:[{type:'text',text:'beta'}]};
+    },
+  },{
+    isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerTool:1,
+    maxCallsPerActorWindow:3,actorWindowMs:1000,callTimeoutMs:1000,
+  });
+  const invoke=name=>server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  const alpha=invoke(alphaName);
+  await Promise.resolve();await Promise.resolve();
+  const duplicate=await invoke(alphaName);
+  assert.equal(duplicate.error.code,-32000);
+  assert.equal(duplicate.error.message,'Capability unavailable');
+  const beta=await invoke(betaName);
+  assert.equal(beta.result.content[0].text,'beta',
+    'Second owner can read while first owner holds a slot');
+  assert.deepEqual(calls,[alphaName,betaName]);
+  releaseAlpha({content:[{type:'text',text:'alpha'}]});
+  assert.equal((await alpha).result.content[0].text,'alpha');
+  const again=await invoke(alphaName);
+  assert.equal(again.result.content[0].text,'alpha');
+  assert.equal(calls.length,3,'Per-tool denial never charged the actor window');
+});
+
+test('per-tool cap remains charged on timed-out owner until actual settlement',async()=>{
+  const alphaName='mesh__fixture_alpha_status__status_read';
+  const betaName='mesh__fixture_beta_status__status_read';
+  let releaseAlpha,calls=0;
+  const alphaGate=new Promise(resolve=>{releaseAlpha=resolve});
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(name){
+      calls++;
+      return name===alphaName ? alphaGate : {content:[{type:'text',text:'beta'}]};
+    },
+  },{isAuthenticated:()=>true,maxConcurrentCalls:2,
+     maxConcurrentPerTool:1,callTimeoutMs:20});
+  const invoke=name=>server.dispatch(request('tools/call',{name,arguments:{}}),authorized);
+  const first=await invoke(alphaName);
+  assert.equal(first.error.code,-32000,'Caller deadline expires');
+  const denied=await invoke(alphaName);
+  assert.equal(denied.error.code,-32000,'Underlying owner still holds its slot');
+  const independent=await invoke(betaName);
+  assert.equal(independent.result.content[0].text,'beta');
+  assert.equal(calls,2);
+  releaseAlpha({content:[{type:'text',text:'alpha'}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  const recovered=await invoke(alphaName);
+  assert.equal(recovered.result.content[0].text,'alpha');
+  assert.equal(calls,3);
+});
+
+test('per-tool admission configuration rejects unsafe values and unexpected options',()=>{
+  const bridge={listTools(){return[];},callTool(){return {content:[]};}};
+  for(const value of [0,-1,1.5,NaN,'1',null,17,3]){
+    assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,{
+      isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerTool:value,
+    }),RangeError);
+  }
+  let getters=0;
+  const opts=Object.defineProperty({isAuthenticated:()=>true},'maxConcurrentPerTool',{
+    enumerable:true,get(){getters++;return 1;},
+  });
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,opts),TypeError);
+  assert.equal(getters,0,'Do not evaluate untrusted configuration getters');
+  const accepted=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated:()=>true,maxConcurrentCalls:2,maxConcurrentPerTool:2,
+  });
+  assert.equal(typeof accepted.dispatch,'function');
+});
