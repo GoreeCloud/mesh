@@ -679,3 +679,117 @@ test('actor window ledger bounds identity cardinality and denies additional keys
   const repeated=await server.dispatch(method,{actor:'fixture.actor-0'});
   assert.equal(repeated.error.code,-32000);
 });
+
+test('optional host tool authorization filters synthetic discovery and denies direct calls',async()=>{
+  const base=createSyntheticMcpToolBridge(createFixtureHarness(),{
+    resolveActor:context=>context?.actor,
+  });
+  const tools=base.listTools();
+  assert.equal(tools.length,2);
+  const invoked=[];
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools:()=>tools,
+    callTool(name,_args,host){
+      invoked.push([name,host.actor]);
+      return {content:[{type:'text',text:'local synthetic result'}]};
+    },
+  },{
+    isAuthenticated:host=>host.authenticated===true,
+    isToolAuthorized:(host,name)=>
+      (host.actor==='fixture.alpha' && name===tools[0].name) ||
+      (host.actor==='fixture.beta' && name===tools[1].name),
+  });
+  const alpha={authenticated:true,actor:'fixture.alpha'};
+  const beta={authenticated:true,actor:'fixture.beta'};
+  const listedAlpha=await server.dispatch(request('tools/list'),alpha);
+  const listedBeta=await server.dispatch(request('tools/list'),beta);
+  assert.deepEqual(listedAlpha.result.tools.map(x=>x.name),[tools[0].name]);
+  assert.deepEqual(listedBeta.result.tools.map(x=>x.name),[tools[1].name]);
+  const call=name=>request('tools/call',{name,arguments:{}});
+  const forbidden=await server.dispatch(call(tools[1].name),alpha);
+  assert.equal(forbidden.error.code,-32000);
+  assert.equal(forbidden.error.message,'Capability unavailable');
+  assert.deepEqual(invoked,[],'Unapproved tool never reaches owner');
+  const allowed=await server.dispatch(call(tools[0].name),alpha);
+  assert.equal(allowed.result.isError,false);
+  assert.deepEqual(invoked,[[tools[0].name,'fixture.alpha']]);
+  const stranger={authenticated:true,actor:'fixture.unknown'};
+  const hidden=await server.dispatch(request('tools/list'),stranger);
+  assert.deepEqual(hidden.result.tools,[]);
+  assert.equal((await server.dispatch(call(tools[0].name),stranger)).error.code,-32000);
+  assert.equal(invoked.length,1);
+});
+
+test('tool policy rejects async grants, errors and nonboolean decisions without owner execution',async()=>{
+  let ownerCalls=0;
+  const bridge={
+    listTools(){return [];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:'never'}]};},
+  };
+  const name='mesh__fixture_alpha_status__status_read';
+  const input=request('tools/call',{name,arguments:{}});
+  for(const authorize of [
+    ()=>Promise.resolve(true),
+    ()=>Promise.reject(Error('private policy failure')),
+    ()=>{throw Error('private tool policy denial');},
+    ()=>1,
+    ()=>({allowed:true}),
+  ]){
+    const server=createSyntheticStatelessMcpDispatcher(bridge,{
+      isAuthenticated:()=>true,isToolAuthorized:authorize,
+    });
+    const denied=await server.dispatch(input,authorized);
+    assert.equal(denied.error.code,-32000);
+    assert.equal(denied.error.message,'Capability unavailable');
+    assert.doesNotMatch(JSON.stringify(denied),/private policy/);
+  }
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(ownerCalls,0);
+});
+
+test('tool policy configuration rejects accessor-backed callback and invalid registration',()=>{
+  const bridge={
+    listTools(){return [];},
+    callTool(){return {content:[]};},
+  };
+  let getters=0;
+  const hostile=Object.defineProperty({isAuthenticated:()=>true},'isToolAuthorized',{
+    enumerable:true,get(){getters++;return ()=>true;},
+  });
+  assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,hostile),TypeError);
+  assert.equal(getters,0);
+  for(const isToolAuthorized of [true,false,'yes',null,{},1]){
+    assert.throws(()=>createSyntheticStatelessMcpDispatcher(bridge,{
+      isAuthenticated:()=>true,isToolAuthorized,
+    }),TypeError);
+  }
+});
+
+test('tool policy receives frozen host identity and ignores model-provided actor labels',async()=>{
+  let ownerCalls=0,policyCalls=0;
+  const bridge={
+    listTools(){return [];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:'ok'}]};},
+  };
+  const server=createSyntheticStatelessMcpDispatcher(bridge,{
+    isAuthenticated:()=>true,
+    isToolAuthorized:(host,name)=>{
+      policyCalls++;
+      assert.equal(Object.isFrozen(host),true);
+      assert.equal(Object.getPrototypeOf(host),null);
+      return host.actor==='fixture.alpha' && name==='mesh__fixture_alpha_status__status_read';
+    },
+  });
+  const req=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  req.params._meta['io.modelcontextprotocol/clientInfo']={name:'fixture.alpha',version:'0.0.1'};
+  const claimedActor={authenticated:true,actor:'fixture.beta'};
+  const denied=await server.dispatch(req,claimedActor);
+  assert.equal(denied.error.code,-32000);
+  claimedActor.actor='fixture.alpha';
+  const allowed=await server.dispatch(req,claimedActor);
+  assert.equal(allowed.result.isError,false);
+  assert.equal(ownerCalls,1);
+  assert.equal(policyCalls,2);
+});
