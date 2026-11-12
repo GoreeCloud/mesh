@@ -4,6 +4,7 @@
 // and APIDOCS.md Git blob fb1e769a04fc00e384189cee9f417532a4c75a22.
 // A trusted caller injects a transport; this module has no URLs, sockets,
 // credentials, fetch, raw server name output or live DNS connections.
+import { readHealthContext, healthSignalAborted } from './exact-health-fixture.mjs';
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const PATH = '/api/dnsClient/healthCheck';
 const MEDIA = 'application/json; charset=utf-8';
@@ -65,19 +66,24 @@ export function createDNSHealthFixtureAdapter(options) {
   const permit = fields.permit ?? (() => false);
   const clock = fields.clock ?? (() => new Date().toISOString());
   return Object.freeze({
-    async authorize(actor, capability, { signal } = {}) {
+    async authorize(actor, capability, context) {
+      const fields = readHealthContext(context);
+      if (!fields || healthSignalAborted(fields.signal)) return false;
+      const { signal } = fields;
       try {
-        return !signal?.aborted &&
-          (await permit(actor, capability, { signal })) === true && !signal?.aborted;
+        return (await permit(actor, capability, { signal })) === true &&
+          !healthSignalAborted(signal);
       } catch { return false; }
     },
-    async readStatus({ signal } = {}) {
-      if (signal?.aborted) throw unavailable();
+    async readStatus(context) {
+      const fields = readHealthContext(context);
+      if (!fields || healthSignalAborted(fields.signal)) throw unavailable();
+      const { signal } = fields;
       let response;
       try {
         response = await transport({ method: 'GET', path: PATH, signal });
       } catch { throw unavailable(); }
-      if (signal?.aborted) throw unavailable();
+      if (healthSignalAborted(signal)) throw unavailable();
       const projected = snapshot(response, ['status', 'contentType', 'body']);
       if (!projected || projected.status !== 200 ||
           projected.contentType !== MEDIA || !validBody(projected.body)) {
