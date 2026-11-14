@@ -7,3 +7,7 @@ The existing dispatcher applies strict bounds and inert-record validation to an 
 The source now validates the original bounded schema but projects fixed, non-authoritative, synthetic-only title and description text. Tool names must still match the restrictive `mesh__...__status_read` grammar; annotations remain `readOnlyHint=true`, `destructiveHint=false`, `openWorldHint=false`, and inputs remain empty. Regression tests confirm that adversarial catalog titles/descriptions cannot surface, while legitimate tool identity is preserved.
 
 No transport, external permissions, credential handling, network access, model calls or deployment are introduced. Host Identity binding, permission revocation, rate limits, worker OS isolation, source-owned service validation, GoreeShield/Wardveil reviews, and Apache-2.0 repository license proposal PR #9 all remain independent review/release gates.
+
+## Synthetic owner-error response minimization
+
+An injected bridge's `isError: true` result can contain provider error messages, private status, or adversarial instructions, even when it passes the inert-record and UTF-8 byte-budget checks. After those checks, the fixture now projects a fixed `Capability unavailable.` error response instead of forwarding owner-authored text. Successful synthetic data results remain unchanged. A regression test covers an adversarial error string. This does not establish a production MCP error policy, schema, transport, or authorization implementation.

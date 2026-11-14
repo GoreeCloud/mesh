@@ -125,7 +125,12 @@ function safeToolResult(raw) {
     // non-ASCII text can be substantially larger on the UTF-8 wire.
     if (!element || element.type !== 'text' || typeof element.text !== 'string' ||
         Buffer.byteLength(element.text, 'utf8') > 4096) return null;
-    return { content: [{ type: 'text', text: element.text }], isError: outer.isError === true };
+    // Owner error strings may contain parser details, private status or attempted
+    // prompt injection. Do not surface them to the AI client even when shaped safely.
+    if (outer.isError === true) {
+      return { content: [{ type: 'text', text: 'Capability unavailable.' }], isError: true };
+    }
+    return { content: [{ type: 'text', text: element.text }], isError: false };
   } catch { return null; }
 }
 
