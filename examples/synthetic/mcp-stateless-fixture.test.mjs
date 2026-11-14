@@ -353,7 +353,7 @@ test('post-registration callback mutation cannot swap owner methods or authentic
   }),authorized);
   assert.equal(result.result.content[0].text,fixtureText('synthetic'));
   assert.equal(result.result.isError,false);
-  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,4);
+  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,5);
   assert.equal(swapped,0,'Never trust callbacks changed after registration');
 });
 
