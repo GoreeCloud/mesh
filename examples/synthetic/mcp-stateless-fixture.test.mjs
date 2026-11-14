@@ -1064,3 +1064,38 @@ test('mid-flight tool permission revocation denies output independently of host 
   const accepted = await server.dispatch(method, authorized);
   assert.equal(accepted.result.isError, false);
 });
+
+test('malformed tool names never reach the synthetic owner or tool policy', async () => {
+  let ownerCalls = 0;
+  let policyCalls = 0;
+  const dispatcher = createSyntheticStatelessMcpDispatcher({
+    listTools() { return []; },
+    callTool() { ownerCalls++; return {content:[{type:'text',text:fixtureText()}]}; },
+  }, {
+    isAuthenticated: () => true,
+    isToolAuthorized: () => { policyCalls++; return true; },
+  });
+  const unsafeNames = [
+    '', 'status.read', 'mesh__fixture_alpha_status__status_write',
+    'mesh__fixture_alpha_status__status_read:invoke',
+    'mesh__fixture_alpha_status__status_read\\nprivate',
+    'mesh__fixture_alpha_status__dangerous_command',
+    'mesh__fixture Alpha__status_read', 'mesh__X__status_read',
+    'mesh__a__status_read',
+    'mesh__' + 'x'.repeat(65) + '__status_read',
+  ];
+  for (const name of unsafeNames) {
+    const response = await dispatcher.dispatch(request('tools/call', {
+      name, arguments: {},
+    }), authorized);
+    assert.equal(response.error.code, -32602, name);
+  }
+  assert.equal(ownerCalls, 0, 'invalid tool names never execute owner callbacks');
+  assert.equal(policyCalls, 0, 'invalid tool names never reach host tool policy');
+  const wellFormedButAbsent = await dispatcher.dispatch(request('tools/call', {
+    name: 'mesh__missing__status_read', arguments: {},
+  }), authorized);
+  assert.equal(wellFormedButAbsent.result.isError, false,
+    'syntax filtering alone is not a registry or authorization boundary');
+  assert.equal(ownerCalls, 1);
+});
