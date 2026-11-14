@@ -292,9 +292,16 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
           const tools = safeToolCatalog(Reflect.apply(listTools, bridge, []));
           if (!tools) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          const visible = tools.filter(tool => permittedTool(host, tool.name));
+          // A trusted owner may revoke the host while its synchronous
+          // discovery callback runs. Never publish a catalog that passed only
+          // the initial admission check before that callback.
+          if (!authenticatedHost(host)) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
           return reply(rpc.id, {
             resultType: 'complete',
-            tools: tools.filter(tool => permittedTool(host, tool.name)),
+            tools: visible,
           });
         }
         if (rpc.method === 'tools/call') {
