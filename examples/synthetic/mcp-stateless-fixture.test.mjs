@@ -1008,3 +1008,59 @@ test('synthetic tool success rejects instructions, hidden fields and duplicate s
     assert.doesNotMatch(JSON.stringify(response), /private tokens|IGNORE PRIOR|secret/);
   }
 });
+
+test('mid-flight host authentication withdrawal denies completed synthetic output', async () => {
+  let release, started;
+  const ownerStarted = new Promise(resolve => { started = resolve; });
+  const resultReady = new Promise(resolve => { release = resolve; });
+  let authenticated = true, invoked = 0;
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() { return []; },
+    callTool() { invoked++; started(); return resultReady; },
+  }, { isAuthenticated: () => authenticated, callTimeoutMs: 1000 });
+  const pending = server.dispatch(request('tools/call', {
+    name: 'mesh__fixture_alpha_status__status_read', arguments: {},
+  }), authorized);
+  await ownerStarted;
+  authenticated = false;
+  release({ content: [{ type: 'text', text: fixtureText() }] });
+  const denied = await pending;
+  assert.equal(denied.error.code, -32000);
+  assert.equal(denied.error.message, 'Capability unavailable');
+  assert.equal(invoked, 1, 'response revocation cannot undo source-owned work');
+  assert.doesNotMatch(JSON.stringify(denied), /synthetic-local-only|observed_at/);
+  authenticated = true;
+  const accepted = await server.dispatch(request('tools/call', {
+    name: 'mesh__fixture_alpha_status__status_read', arguments: {},
+  }), authorized);
+  assert.equal(accepted.result.isError, false);
+});
+
+test('mid-flight tool permission revocation denies output independently of host login', async () => {
+  let release, started;
+  const ownerStarted = new Promise(resolve => { started = resolve; });
+  const resultReady = new Promise(resolve => { release = resolve; });
+  let permitted = true, invoked = 0;
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() { return []; },
+    callTool() { invoked++; started(); return resultReady; },
+  }, {
+    isAuthenticated: () => true,
+    isToolAuthorized: (_host, name) => permitted && name === 'mesh__fixture_alpha_status__status_read',
+    callTimeoutMs: 1000,
+  });
+  const method = request('tools/call', {
+    name: 'mesh__fixture_alpha_status__status_read', arguments: {},
+  });
+  const pending = server.dispatch(method, authorized);
+  await ownerStarted;
+  permitted = false;
+  release({ content: [{ type: 'text', text: fixtureText() }] });
+  const denied = await pending;
+  assert.equal(denied.error.code, -32000);
+  assert.equal(invoked, 1);
+  assert.doesNotMatch(JSON.stringify(denied), /synthetic-local-only|observed_at/);
+  permitted = true;
+  const accepted = await server.dispatch(method, authorized);
+  assert.equal(accepted.result.isError, false);
+});
