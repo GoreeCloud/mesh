@@ -91,8 +91,13 @@ function safeToolCatalog(raw) {
           !hints || hints.readOnlyHint !== true ||
           hints.destructiveHint !== false || hints.openWorldHint !== false) return null;
       names.add(data.name);
+      // Tool names are validated above, but presentation metadata is never
+      // promoted from an injected bridge into an AI client's instruction
+      // surface. Pin the minimal synthetic-only meaning locally.
       tools.push({
-        name: data.name, title: data.title, description: data.description,
+        name: data.name,
+        title: 'Synthetic status fixture',
+        description: 'Local-only synthetic status contract. No live service, health, or deployment assertion.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       });
