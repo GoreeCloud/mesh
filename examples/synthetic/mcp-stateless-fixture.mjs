@@ -386,6 +386,13 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           }
           const output = safeToolResult(result);
           if (!output) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          // A read may outlive its permission. Do not disclose its completed
+          // response when trusted authentication or tool consent is withdrawn
+          // while the owner was running. This is a response gate, not a claim
+          // that source-owned processing was cancelled.
+          if (!authenticatedHost(host) || !permittedTool(host, params.name)) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
           return reply(rpc.id, { resultType: 'complete', ...output });
         }
         return rpcError(rpc.id, -32601, 'Method not found');
