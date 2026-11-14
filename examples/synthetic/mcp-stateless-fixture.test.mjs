@@ -353,7 +353,7 @@ test('post-registration callback mutation cannot swap owner methods or authentic
   }),authorized);
   assert.equal(result.result.content[0].text,fixtureText('synthetic'));
   assert.equal(result.result.isError,false);
-  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,4);
+  assert.equal(listed,1);assert.equal(called,1);assert.equal(authenticated,5);
   assert.equal(swapped,0,'Never trust callbacks changed after registration');
 });
 
@@ -1098,4 +1098,31 @@ test('malformed tool names never reach the synthetic owner or tool policy', asyn
   assert.equal(wellFormedButAbsent.result.isError, false,
     'syntax filtering alone is not a registry or authorization boundary');
   assert.equal(ownerCalls, 1);
+});
+
+test('synthetic tools/list denies a catalog when host admission is revoked during discovery', async () => {
+  const bridge = createSyntheticMcpToolBridge(createFixtureHarness(), {
+    resolveActor: context => context?.actor,
+  });
+  let authenticated = true;
+  let revokeOnList = true;
+  let listings = 0;
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() {
+      listings += 1;
+      if (revokeOnList) authenticated = false;
+      return bridge.listTools();
+    },
+    callTool(name, args, context) { return bridge.callTool(name, args, context); },
+  }, { isAuthenticated: () => authenticated });
+  const denied = await server.dispatch(request('tools/list'), authorized);
+  assert.equal(denied.error.code, -32000);
+  assert.equal(denied.error.message, 'Capability unavailable');
+  assert.doesNotMatch(JSON.stringify(denied), /mesh__fixture_|Synthetic status fixture/);
+  assert.equal(listings, 1);
+  authenticated = true;
+  revokeOnList = false;
+  const accepted = await server.dispatch(request('tools/list'), authorized);
+  assert.equal(accepted.result.tools.length, 2);
+  assert.equal(listings, 2);
 });
