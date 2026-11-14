@@ -9,6 +9,7 @@ const VERSION_KEY = 'io.modelcontextprotocol/protocolVersion';
 const CAPABILITIES_KEY = 'io.modelcontextprotocol/clientCapabilities';
 const CLIENT_KEY = 'io.modelcontextprotocol/clientInfo';
 const SERVER_KEY = 'io.modelcontextprotocol/serverInfo';
+const SYNTHETIC_TOOL_NAME = /^mesh__[a-z][a-z0-9_-]{1,63}__status_read$/;
 
 function record(value, keys, required = []) {
   try {
@@ -73,7 +74,7 @@ function safeToolCatalog(raw) {
         ['name', 'title', 'description', 'inputSchema', 'annotations'],
         ['name', 'title', 'description', 'inputSchema', 'annotations']);
       if (!data || typeof data.name !== 'string' ||
-          !/^mesh__[a-z][a-z0-9_-]{1,63}__status_read$/.test(data.name) ||
+          !SYNTHETIC_TOOL_NAME.test(data.name) ||
           names.has(data.name) ||
           typeof data.title !== 'string' || data.title.length < 1 ||
           data.title.length > 80 ||
@@ -298,7 +299,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
         }
         if (rpc.method === 'tools/call') {
           if (!Object.prototype.hasOwnProperty.call(params, 'name') ||
-              typeof params.name !== 'string' || params.name.length > 120 ||
+              typeof params.name !== 'string' || !SYNTHETIC_TOOL_NAME.test(params.name) ||
               Reflect.ownKeys(params).some(key => !['_meta', 'name', 'arguments'].includes(key))) {
             return rpcError(rpc.id, -32602, 'Invalid params');
           }
