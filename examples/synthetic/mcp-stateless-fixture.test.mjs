@@ -1099,3 +1099,30 @@ test('malformed tool names never reach the synthetic owner or tool policy', asyn
     'syntax filtering alone is not a registry or authorization boundary');
   assert.equal(ownerCalls, 1);
 });
+
+test('synthetic tools/list denies a catalog when host admission is revoked during discovery', async () => {
+  const bridge = createSyntheticMcpToolBridge(createFixtureHarness(), {
+    resolveActor: context => context?.actor,
+  });
+  let authenticated = true;
+  let revokeOnList = true;
+  let listings = 0;
+  const server = createSyntheticStatelessMcpDispatcher({
+    listTools() {
+      listings += 1;
+      if (revokeOnList) authenticated = false;
+      return bridge.listTools();
+    },
+    callTool(name, args, context) { return bridge.callTool(name, args, context); },
+  }, { isAuthenticated: () => authenticated });
+  const denied = await server.dispatch(request('tools/list'), authorized);
+  assert.equal(denied.error.code, -32000);
+  assert.equal(denied.error.message, 'Capability unavailable');
+  assert.doesNotMatch(JSON.stringify(denied), /mesh__fixture_|Synthetic status fixture/);
+  assert.equal(listings, 1);
+  authenticated = true;
+  revokeOnList = false;
+  const accepted = await server.dispatch(request('tools/list'), authorized);
+  assert.equal(accepted.result.tools.length, 2);
+  assert.equal(listings, 2);
+});
