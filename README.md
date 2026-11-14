@@ -209,3 +209,7 @@ Before implementation details or release status can be asserted, resolve:
 - [Canonical five-MIPS release-eligibility requirement](https://drive.google.com/file/d/1mzBTnWag2ca8wsRg9uHl4IXOkjkoTT9o/view) — authoritative Google Drive Markdown requirement (historical filename retained).
 
 **Change-control note:** This README captures current founder product direction and reflects the separately verified correction of the canonical five-MIPS requirement. It does not itself approve final technical architecture, demonstrate functioning integrations, or certify a release.
+
+## License
+
+The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
