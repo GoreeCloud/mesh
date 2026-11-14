@@ -125,12 +125,32 @@ function safeToolResult(raw) {
     // non-ASCII text can be substantially larger on the UTF-8 wire.
     if (!element || element.type !== 'text' || typeof element.text !== 'string' ||
         Buffer.byteLength(element.text, 'utf8') > 4096) return null;
-    // Owner error strings may contain parser details, private status or attempted
-    // prompt injection. Do not surface them to the AI client even when shaped safely.
+    // Owner error strings may contain private details or attempted prompt
+    // injection. A successful owner text is also untrusted: accept only the
+    // exact canonical JSON shape that the synthetic status bridge generates.
     if (outer.isError === true) {
       return { content: [{ type: 'text', text: 'Capability unavailable.' }], isError: true };
     }
-    return { content: [{ type: 'text', text: element.text }], isError: false };
+    let rawStatus;
+    try { rawStatus = JSON.parse(element.text); } catch { return null; }
+    const status = record(rawStatus, [
+      'evidence_status', 'environment', 'state', 'observed_at',
+    ], ['evidence_status', 'environment', 'state', 'observed_at']);
+    if (!status || status.evidence_status !== 'prototype' ||
+        status.environment !== 'synthetic-local-only' ||
+        !['ok', 'degraded'].includes(status.state) ||
+        typeof status.observed_at !== 'string') return null;
+    const instant = Date.parse(status.observed_at);
+    if (!Number.isFinite(instant) ||
+        new Date(instant).toISOString() !== status.observed_at) return null;
+    const projected = JSON.stringify({
+      evidence_status: 'prototype', environment: 'synthetic-local-only',
+      state: status.state, observed_at: status.observed_at,
+    });
+    // Reject duplicate JSON keys, alternate encodings, and extraneous content.
+    // Real synthetic bridge outputs already use this exact serializer/order.
+    if (element.text !== projected) return null;
+    return { content: [{ type: 'text', text: projected }], isError: false };
   } catch { return null; }
 }
 
