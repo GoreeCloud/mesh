@@ -4,7 +4,7 @@ import { createSyntheticHarness, CONTRACT_VERSION } from '../synthetic/harness.m
 import { createTasksHealthFixtureAdapter, TASKS_HEALTH_CONTRACT } from './tasks-healthz.mjs';
 import { createDavHealthFixtureAdapter, DAV_HEALTH_CONTRACT } from './dav-healthz.mjs';
 import { createMemosHealthFixtureAdapter, MEMOS_HEALTH_CONTRACT } from './memos-health.mjs';
-import { createWorkspaceTeamsHealthFixtureAdapter, WORKSPACE_TEAMS_HEALTH_CONTRACT } from './workspace-teams-health.mjs';
+import { createOpenRoomHealthFixtureAdapter, OPENROOM_HEALTH_CONTRACT } from './openroom-health.mjs';
 
 const seenAt = '2026-11-09T00:00:00.000Z';
 const products = [
@@ -15,8 +15,8 @@ const products = [
     contract: TASKS_HEALTH_CONTRACT, body: '{"status":"ok","mode":"loopback-development"}' },
   { name: 'Memos', id: 'memos.health', owner: 'memos', create: createMemosHealthFixtureAdapter,
     contract: MEMOS_HEALTH_CONTRACT, body: '{"status": "ok", "service": "goreecloud-memos"}' },
-  { name: 'Workspace Teams', id: 'workspace-teams.health', owner: 'workspace-teams',
-    create: createWorkspaceTeamsHealthFixtureAdapter, contract: WORKSPACE_TEAMS_HEALTH_CONTRACT,
+  { name: 'OpenRoom', id: 'openroom.health', owner: 'openroom',
+    create: createOpenRoomHealthFixtureAdapter, contract: OPENROOM_HEALTH_CONTRACT,
     body: '{"status":"ok"}' },
 ];
 const reply = (body, contentType = 'application/json; charset=utf-8') => ({ status: 200, contentType, body });
@@ -43,7 +43,7 @@ for (const item of products) {
       dav: '6a270d95c406def94482a9a4c6e9006c016a1e51',
       tasks: 'd3b0b1a554608f53afcd50ae5641295d17b564e0',
       memos: '4a607701787a7ef6791d5a5dbf600938ecb3a4ed',
-      'workspace-teams': 'e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27',
+      'openroom': 'b0d033962c6bcde0489ba93367603a4698dd0c59',
     };
     assert.equal(item.contract.source_blob, inspected[item.owner],
                  'Update source pin only after reviewing its actual owner health route');
@@ -178,8 +178,8 @@ test('Tasks health fixture rejects authenticated bootstrap page content without 
   assert.equal(JSON.stringify(projection).includes('checkpoint'), false);
 });
 
-test('Workspace Teams health cannot be confused with Tasks, Memos or DAV health or private API data', async () => {
-  const item = products.find(p => p.owner === 'workspace-teams');
+test('OpenRoom health cannot be confused with Tasks, Memos or DAV health or private API data', async () => {
+  const item = products.find(p => p.owner === 'openroom');
   let transportCalls = 0;
   for (const body of [
     products.find(p => p.owner === 'tasks').body,

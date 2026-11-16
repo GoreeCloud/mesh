@@ -114,33 +114,31 @@ The fast npm test suite covers synthetic local adapter and HTTP negative cases w
 
 **Wire-boundary regression:** The scoped transport now refuses missing, duplicated or cacheable source response metadata and fails closed on credentials exceeding the Go source's maximum byte length or containing trailing newlines. These are additional checks of the *local development* route, not transport authentication, protection against an attacker who controls the selected loopback port or authorization to reach a VPS. The caller still must verify target process ownership in any future real connector.
 
-## Workspace Teams source-pinned synthetic health fixture (November 10, 2026)
+## OpenRoom source-pinned synthetic health fixture (refreshed November 15, 2026)
 
-The separate development Workspace Teams source commit
-32429a0ae1d15dfc79864c75ee9afcf7932c58eb was directly inspected at
-src/server.mjs (Git blob e6d80f401454ee9bd78b4ab9ae9066cc66d3ae27).
-The current GET /api/health route returns exactly HTTP 200 with
-{"status":"ok"}, the UTF-8 JSON content type and Cache-Control: no-store
-through the shared send helper. It is a public *liveness* response, **not**
-a sign that first-owner registration is protected, SQLite/attachments are
-healthy, the app is ready for public traffic or any user is authorized.
+The product formerly named Workspace Teams is now **GoreeCloud OpenRoom**,
+with current owner repository `GoreeCloud/openroom`. The verified main source
+commit `04219a84b73c454bc76fdafe5934a5d830d997d0` has `src/server.mjs`
+Git blob `b0d033962c6bcde0489ba93367603a4698dd0c59`.
+The `GET /api/health` route returns exactly HTTP 200 with
+`{"status":"ok"}`, the UTF-8 JSON content type and `Cache-Control: no-store`
+through the source-owned `send` helper. This is public *liveness*, not evidence
+of protected first-owner setup, attachment/SQLite integrity, user permission
+or readiness for external traffic.
 
-The workspace-teams-health.mjs module reuses only the existing bounded,
-exact-body transport-injected fixture. The synthetic Mesh permit and owner
-permit independently default deny; any result body differing from the
-reviewed status shape, including account or private space fields, is
-unavailable. The fixture does not open sockets or read accounts, messages,
-tasks, notes, files, attachment scan state, first-owner setup or session
-cookies. It does not configure a real Workspace Teams connector or enable
-synchronization. The source pin is deliberately distinct from unrelated
-Wardveil, Tasks, Memos, Gateway and VPN status source pins.
+`openroom-health.mjs` supplies a transport-injected, bounded, exact-body
+health fixture with synthetic capability `openroom.health`. Both Mesh and
+owner permits default deny. Private account, space, message, session and
+attachment fields are rejected; no sockets, production requests, secrets,
+messages, tasks, files, or sessions are accessed by the fixture. The renamed
+capability is a synthetic test contract only, with no live endpoint, service
+authentication, tenant permission, deployment, or synchronization. The retired
+`workspace-teams.health` test identifier is not advertised by this fixture.
 
-Live integration requires a separately authorized source-owner service
-identity, Identity tenant-scoped policy, GoreeShield privacy minimization,
-Wardveil security enforcement, TLS/host trust, a verified fixed target
-process, monitoring and source/version/release approval. The current
-source is development-only and may change; an exact status fixture is not
-production integration acceptance.
+A real OpenRoom connector requires source-owner service authorization,
+GoreeCloud Identity and tenant-scoped permission, GoreeShield minimization,
+Wardveil enforcement, TLS/host trust, verified target process, monitoring,
+source/version compatibility and independent deployment approval.
 
 **Memos source refresh, November 10, 2026:** Memos development main
 f8e7795b5a2d6dd5494617d32df5db87a67fcb7d, following PR #69,
