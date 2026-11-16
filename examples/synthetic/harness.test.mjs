@@ -90,6 +90,44 @@ test('Mesh and owner both independently default deny', async () => {
   assert.equal((await read(harness(), '../invalid')).error.code, 'denied');
 });
 
+test('revoking Mesh permission during an owner read suppresses its result', async () => {
+  let release, started;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  let permitted = true;
+  const h = harness({
+    timeoutMs: 1000,
+    meshPermit: () => permitted,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => { started(); return held; },
+    }) },
+  });
+  const pending = read(h);
+  await entered;
+  permitted = false;
+  release(status());
+  assert.deepEqual(await pending, { ok: false, error: { code: 'denied' } });
+});
+
+test('revoking owner authorization during a read suppresses its result', async () => {
+  let release, started;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  let authorized = true;
+  const h = harness({
+    timeoutMs: 1000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      authorize: () => authorized,
+      readStatus: async () => { started(); return held; },
+    }) },
+  });
+  const pending = read(h);
+  await entered;
+  authorized = false;
+  release(status());
+  assert.deepEqual(await pending, { ok: false, error: { code: 'denied' } });
+});
+
 test('unavailable owner and owner read errors never become success', async () => {
   assert.equal((await read(harness({ adapters: {} }))).error.code, 'unavailable');
   assert.equal((await read(harness({ adapters: { [capabilityId]: fixtureAdapter({ readStatus: () => { throw Error('offline'); } }) } }))).error.code, 'unavailable');
