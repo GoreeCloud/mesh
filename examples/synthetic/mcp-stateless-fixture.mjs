@@ -341,7 +341,9 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
           }
           if (maxCallsPerActorWindow !== undefined) {
-            const now = Date.now();
+            // Wall-clock corrections must not reset actor quotas prematurely.
+            // A monotonic process-local window also avoids clock rollback stalls.
+            const now = performance.now();
             // Expired quotas are forgotten; new keys are refused if the
             // bounded local ledger is full, never allowed to grow forever.
             for (const [key, window] of actorWindows) {
