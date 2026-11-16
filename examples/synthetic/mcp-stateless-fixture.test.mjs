@@ -667,6 +667,29 @@ test('optional per-actor call window denies rapid sequential reads without block
   assert.equal(called.length,4,'Expired fixed window must recover');
 });
 
+test('wall clock advances cannot reset the monotonic actor call window',async()=>{
+  let ownerCalls=0;
+  const server=createSyntheticStatelessMcpDispatcher({
+    listTools(){return[];},
+    callTool(){ownerCalls++;return {content:[{type:'text',text:fixtureText('ok')}]};},
+  },{isAuthenticated:()=>true,maxConcurrentCalls:2,
+     maxCallsPerActorWindow:1,actorWindowMs:60000});
+  const method=request('tools/call',{
+    name:'mesh__fixture_alpha_status__status_read',arguments:{},
+  });
+  const context={authenticated:true,actor:'fixture.alpha'};
+  assert.equal((await server.dispatch(method,context)).result.isError,false);
+  const wallTime=Date.now;
+  try {
+    Date.now=()=>wallTime()+120000; // simulated NTP jump, no real clock change
+    const denied=await server.dispatch(method,context);
+    assert.equal(denied.error.code,-32000);
+    assert.equal(ownerCalls,1,'Wall-clock jumps never authorize extra owner reads');
+  } finally {
+    Date.now=wallTime;
+  }
+});
+
 test('actor window quota is keyed to trusted identity and configuration rejects unsafe bounds',async()=>{
   let executed=0;
   const bridge={
