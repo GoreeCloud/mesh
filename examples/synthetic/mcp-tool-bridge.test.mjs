@@ -196,3 +196,16 @@ test('owner result requires verified capability identity and canonical UTC times
   reading={...reading,capabilityId:undefined};
   assert.equal((await bridge.callTool(tool,{}, {authenticatedActor:'fixture.reader'})).isError,true);
 });
+
+
+test('invalid host-resolved actor values are denied before owner invocation',async()=>{
+  const {harness,events}=source();
+  const bridge=createSyntheticMcpToolBridge(harness,{resolveActor:getActor});
+  const name=bridge.listTools()[0].name;
+  for(const authenticatedActor of ['', ' fixture.reader', 'fixture.reader ',
+    'bad/actor', 'x'.repeat(65), 167772170, null]){
+    const result=await bridge.callTool(name,{}, {authenticatedActor});
+    assert.equal(result.isError,true,'Invalid actor cannot authorize owner work');
+  }
+  assert.equal(events.length,0,'No owner read should be attempted');
+});
