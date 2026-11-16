@@ -284,7 +284,17 @@ export function createSyntheticHarness(options = {}) {
             return { kind: 'denied' };
           }
           try {
-            return { kind: 'result', value: await Reflect.apply(readStatus, adapter, [{ signal: controller.signal }]) };
+            const value = await Reflect.apply(readStatus, adapter, [{ signal: controller.signal }]);
+            if (controller.signal.aborted) return { kind: 'denied' };
+            // A read may finish after the owner or Mesh withdraws access.
+            // Recheck both authorities before publishing its result. These
+            // remain synthetic, process-local checks, not atomic revocation.
+            if (await meshPermit(actor, capability) !== true || controller.signal.aborted) {
+              return { kind: 'denied' };
+            }
+            if (await Reflect.apply(authorize, adapter, [actor, capability, { signal: controller.signal }]) !== true ||
+                controller.signal.aborted) return { kind: 'denied' };
+            return { kind: 'result', value };
           } catch {
             return { kind: 'unavailable' };
           }
