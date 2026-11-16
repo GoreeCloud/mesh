@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: GoreeCloud/identity
-          ref: 703cb1b55f29e849d90f3281bb582cf33ee78804
+          ref: eb26a31e263e8444469bd06265d0e1b0fb1a895f
           path: identity-source
           persist-credentials: false
       - name: Setup Python 3.12
@@ -34,9 +34,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = '703cb1b55f29e849d90f3281bb582cf33ee78804'
+          test "$(git rev-parse HEAD)" = 'eb26a31e263e8444469bd06265d0e1b0fb1a895f'
           test "$(git hash-object src/goreecloud_identity/resource_server.py)" = 'e32c3882c9a72d71e700998cb7b6339976f815fb'
-          test "$(git hash-object src/goreecloud_identity/policy.py)" = 'ff624a681b41917c440c95673a23ef48930fa0c1'
+          test "$(git hash-object src/goreecloud_identity/policy.py)" = 'ffc4838fff8c9f11074c5a08d47f223c65da364f'
           test "$(git hash-object src/goreecloud_identity/tokens.py)" = '054edbb0facd10f559da9038ec8bc8a4f7eac21d'
           test "$(git hash-object requirements-auth.txt)" = 'a417daaa68f7850f9e7dfcbaa0278ec6d8930bc2'
           grep -Fx 'PyJWT[crypto]==2.15.1' requirements-auth.txt
