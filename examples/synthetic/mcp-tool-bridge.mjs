@@ -106,7 +106,9 @@ export function createSyntheticMcpToolBridge(harness, options = {}) {
           Promise.resolve(actor).catch(() => {});
           return deny();
         }
-        if (typeof actor !== 'string') return deny();
+        // Match the harness actor contract at the bridge boundary itself.
+        // A misconfigured trusted resolver must not invoke any owner read.
+        if (typeof actor !== 'string' || !CAPABILITY_ID.test(actor)) return deny();
         const expectedCapabilityId = map.get(name);
         const result = await Reflect.apply(read, harness, [{
           actor, capabilityId: expectedCapabilityId, operation: 'status.read',
