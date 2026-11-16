@@ -296,7 +296,12 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // A trusted owner may revoke the host while its synchronous
           // discovery callback runs. Never publish a catalog that passed only
           // the initial admission check before that callback.
-          if (!authenticatedHost(host)) {
+          if (!authenticatedHost(host) ||
+              // A later tool-policy callback can revoke an earlier tool
+              // during catalog construction. Recheck the entire projection
+              // before returning; trusted policy must still enforce atomic
+              // revisions for any production integration.
+              visible.some(tool => !permittedTool(host, tool.name))) {
             return rpcError(rpc.id, -32000, 'Capability unavailable');
           }
           return reply(rpc.id, {
