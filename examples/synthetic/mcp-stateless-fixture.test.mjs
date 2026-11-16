@@ -1126,3 +1126,22 @@ test('synthetic tools/list denies a catalog when host admission is revoked durin
   assert.equal(accepted.result.tools.length, 2);
   assert.equal(listings, 2);
 });
+
+test('synthetic discovery does not expose earlier tools revoked during later tool-policy evaluation', async () => {
+  const bridge = createSyntheticMcpToolBridge(createFixtureHarness(), {
+    resolveActor: context => context?.actor,
+  });
+  const names = bridge.listTools().map(tool => tool.name);
+  assert.equal(names.length, 2);
+  let firstAllowed = true;
+  const server = createSyntheticStatelessMcpDispatcher(bridge, {
+    isAuthenticated: () => true,
+    isToolAuthorized: (_context, name) => {
+      if (name === names[1]) firstAllowed = false;
+      return name === names[0] ? firstAllowed : true;
+    },
+  });
+  const result = await server.dispatch(request('tools/list'), authorized);
+  assert.equal(result.error?.code, -32000, 'an earlier authorization was revoked during catalog projection');
+  assert.doesNotMatch(JSON.stringify(result), /mesh__fixture_/);
+});
