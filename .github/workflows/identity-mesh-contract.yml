@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: GoreeCloud/identity
-          ref: b29ee6fadc12079847f9af53587bcdb1bef57f79
+          ref: a2bcc8e972b794738152711bcfc32a5e68222e4f
           path: identity-source
           persist-credentials: false
       - name: Setup Python 3.12
@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 'b29ee6fadc12079847f9af53587bcdb1bef57f79'
+          test "$(git rev-parse HEAD)" = 'a2bcc8e972b794738152711bcfc32a5e68222e4f'
           test "$(git hash-object src/goreecloud_identity/resource_server.py)" = 'e32c3882c9a72d71e700998cb7b6339976f815fb'
           test "$(git hash-object src/goreecloud_identity/policy.py)" = '239218a242e5fe6e563fde401c4cfe180a8d0ae4'
           test "$(git hash-object src/goreecloud_identity/tokens.py)" = '054edbb0facd10f559da9038ec8bc8a4f7eac21d'
