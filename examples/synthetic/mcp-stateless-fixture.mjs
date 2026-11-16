@@ -9,6 +9,7 @@ const VERSION_KEY = 'io.modelcontextprotocol/protocolVersion';
 const CAPABILITIES_KEY = 'io.modelcontextprotocol/clientCapabilities';
 const CLIENT_KEY = 'io.modelcontextprotocol/clientInfo';
 const SERVER_KEY = 'io.modelcontextprotocol/serverInfo';
+const SYNTHETIC_TOOL_NAME = /^mesh__[a-z][a-z0-9_-]{1,63}__status_read$/;
 
 function record(value, keys, required = []) {
   try {
@@ -73,7 +74,7 @@ function safeToolCatalog(raw) {
         ['name', 'title', 'description', 'inputSchema', 'annotations'],
         ['name', 'title', 'description', 'inputSchema', 'annotations']);
       if (!data || typeof data.name !== 'string' ||
-          !/^mesh__[a-z][a-z0-9_-]{1,63}__status_read$/.test(data.name) ||
+          !SYNTHETIC_TOOL_NAME.test(data.name) ||
           names.has(data.name) ||
           typeof data.title !== 'string' || data.title.length < 1 ||
           data.title.length > 80 ||
@@ -91,8 +92,13 @@ function safeToolCatalog(raw) {
           !hints || hints.readOnlyHint !== true ||
           hints.destructiveHint !== false || hints.openWorldHint !== false) return null;
       names.add(data.name);
+      // Tool names are validated above, but presentation metadata is never
+      // promoted from an injected bridge into an AI client's instruction
+      // surface. Pin the minimal synthetic-only meaning locally.
       tools.push({
-        name: data.name, title: data.title, description: data.description,
+        name: data.name,
+        title: 'Synthetic status fixture',
+        description: 'Local-only synthetic status contract. No live service, health, or deployment assertion.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       });
@@ -120,7 +126,32 @@ function safeToolResult(raw) {
     // non-ASCII text can be substantially larger on the UTF-8 wire.
     if (!element || element.type !== 'text' || typeof element.text !== 'string' ||
         Buffer.byteLength(element.text, 'utf8') > 4096) return null;
-    return { content: [{ type: 'text', text: element.text }], isError: outer.isError === true };
+    // Owner error strings may contain private details or attempted prompt
+    // injection. A successful owner text is also untrusted: accept only the
+    // exact canonical JSON shape that the synthetic status bridge generates.
+    if (outer.isError === true) {
+      return { content: [{ type: 'text', text: 'Capability unavailable.' }], isError: true };
+    }
+    let rawStatus;
+    try { rawStatus = JSON.parse(element.text); } catch { return null; }
+    const status = record(rawStatus, [
+      'evidence_status', 'environment', 'state', 'observed_at',
+    ], ['evidence_status', 'environment', 'state', 'observed_at']);
+    if (!status || status.evidence_status !== 'prototype' ||
+        status.environment !== 'synthetic-local-only' ||
+        !['ok', 'degraded'].includes(status.state) ||
+        typeof status.observed_at !== 'string') return null;
+    const instant = Date.parse(status.observed_at);
+    if (!Number.isFinite(instant) ||
+        new Date(instant).toISOString() !== status.observed_at) return null;
+    const projected = JSON.stringify({
+      evidence_status: 'prototype', environment: 'synthetic-local-only',
+      state: status.state, observed_at: status.observed_at,
+    });
+    // Reject duplicate JSON keys, alternate encodings, and extraneous content.
+    // Real synthetic bridge outputs already use this exact serializer/order.
+    if (element.text !== projected) return null;
+    return { content: [{ type: 'text', text: projected }], isError: false };
   } catch { return null; }
 }
 
@@ -261,14 +292,21 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           if (Reflect.ownKeys(params).length !== 1) return rpcError(rpc.id, -32602, 'Invalid params');
           const tools = safeToolCatalog(Reflect.apply(listTools, bridge, []));
           if (!tools) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          const visible = tools.filter(tool => permittedTool(host, tool.name));
+          // A trusted owner may revoke the host while its synchronous
+          // discovery callback runs. Never publish a catalog that passed only
+          // the initial admission check before that callback.
+          if (!authenticatedHost(host)) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
           return reply(rpc.id, {
             resultType: 'complete',
-            tools: tools.filter(tool => permittedTool(host, tool.name)),
+            tools: visible,
           });
         }
         if (rpc.method === 'tools/call') {
           if (!Object.prototype.hasOwnProperty.call(params, 'name') ||
-              typeof params.name !== 'string' || params.name.length > 120 ||
+              typeof params.name !== 'string' || !SYNTHETIC_TOOL_NAME.test(params.name) ||
               Reflect.ownKeys(params).some(key => !['_meta', 'name', 'arguments'].includes(key))) {
             return rpcError(rpc.id, -32602, 'Invalid params');
           }
@@ -356,6 +394,13 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           }
           const output = safeToolResult(result);
           if (!output) return rpcError(rpc.id, -32000, 'Capability unavailable');
+          // A read may outlive its permission. Do not disclose its completed
+          // response when trusted authentication or tool consent is withdrawn
+          // while the owner was running. This is a response gate, not a claim
+          // that source-owned processing was cancelled.
+          if (!authenticatedHost(host) || !permittedTool(host, params.name)) {
+            return rpcError(rpc.id, -32000, 'Capability unavailable');
+          }
           return reply(rpc.id, { resultType: 'complete', ...output });
         }
         return rpcError(rpc.id, -32601, 'Method not found');
