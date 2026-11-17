@@ -209,3 +209,9 @@ Before implementation details or release status can be asserted, resolve:
 - [Canonical five-MIPS release-eligibility requirement](https://drive.google.com/file/d/1mzBTnWag2ca8wsRg9uHl4IXOkjkoTT9o/view) — authoritative Google Drive Markdown requirement (historical filename retained).
 
 **Change-control note:** This README captures current founder product direction and reflects the separately verified correction of the canonical five-MIPS requirement. It does not itself approve final technical architecture, demonstrate functioning integrations, or certify a release.
+
+## Repository license and component boundaries
+
+The original GoreeCloud Mesh reference fixture, synthetic integration contracts, Node.js and Python test utilities, and product documentation in this repository are available under the [Apache License, Version 2.0](LICENSE), copyright (c) 2026 GoreeCloud. Mesh is an **integration platform**, not an assertion that any of the separately owned services or providers are bundled or connected in production. Referenced source products (including Identity, Wardveil, Gateway and VPN), external protocols, tools, trademarks and pinned downloads maintain their own licensing and ownership. No third-party or partner integration is relicensed by this source grant.
+
+The root package remains `private: true` and a development fixture. Licensed source is not evidence of a running mesh control plane, deployed connectors or validated access and privacy boundaries.
