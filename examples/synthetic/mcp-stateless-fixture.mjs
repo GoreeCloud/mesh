@@ -318,6 +318,10 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
           // Model arguments are never copied into trustedContext.
           if (Object.prototype.hasOwnProperty.call(params, 'arguments') &&
               !record(params.arguments, [])) return rpcError(rpc.id, -32602, 'Invalid params');
+          // A model-owned object may change after validation but before the
+          // deferred owner call. Only this fresh frozen, empty status-read
+          // input crosses the boundary; never forward the original reference.
+          const validatedArguments = Object.freeze({});
           // Deny before reserving global/per-actor capacity or contacting
           // the tool owner. A model cannot grant itself visibility by name.
           if (!permittedTool(host, params.name)) {
@@ -373,7 +377,7 @@ export function createSyntheticStatelessMcpDispatcher(bridge, options = {}) {
               // permissions can be revoked between initial admission and
               // this microtask. No stale admission confers ongoing authority.
               if (!authenticatedHost(host) || !permittedTool(host, params.name)) return null;
-              return Reflect.apply(callTool, bridge, [params.name, params.arguments ?? {}, host]);
+              return Reflect.apply(callTool, bridge, [params.name, validatedArguments, host]);
             })
             .catch(() => null)
             .finally(() => {
