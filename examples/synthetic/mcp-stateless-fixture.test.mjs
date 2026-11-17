@@ -78,6 +78,34 @@ test('model-supplied identity and mutation payloads fail before a tool call', as
   assert.equal(unknown.result.content[0].text, 'Capability unavailable.');
 });
 
+test('validated empty model arguments cannot be changed before the owner call', async () => {
+  let received;
+  const bridge = {
+    listTools() { return []; },
+    callTool(_name, args) {
+      received = args;
+      return { content: [{ type: 'text', text: fixtureText() }] };
+    },
+  };
+  const dispatcher = createSyntheticStatelessMcpDispatcher(bridge, {
+    isAuthenticated: () => true,
+  });
+  const modelArguments = {};
+  const pending = dispatcher.dispatch(request('tools/call', {
+    name: 'mesh__fixture_alpha_status__status_read',
+    arguments: modelArguments,
+  }), authorized);
+  // The owner operation starts in a later microtask. Mutation after the
+  // validator returns must not bypass the synthetic empty-argument contract.
+  modelArguments.actor = 'forged-agent';
+  modelArguments.operation = 'status.write';
+  const answer = await pending;
+  assert.equal(answer.result?.isError, false);
+  assert.notStrictEqual(received, modelArguments, 'owner must not receive model object');
+  assert.deepEqual(Reflect.ownKeys(received), [], 'owner receives no late model fields');
+  assert.equal(Object.isFrozen(received), true);
+});
+
 test('unsupported version, unexpected fields and unsupported methods fail closed', async () => {
   const server = fixture();
   const wrong = request('tools/list');
