@@ -90,6 +90,44 @@ test('Mesh and owner both independently default deny', async () => {
   assert.equal((await read(harness(), '../invalid')).error.code, 'denied');
 });
 
+test('revoking Mesh permission during an owner read suppresses its result', async () => {
+  let release, started;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  let permitted = true;
+  const h = harness({
+    timeoutMs: 1000,
+    meshPermit: () => permitted,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => { started(); return held; },
+    }) },
+  });
+  const pending = read(h);
+  await entered;
+  permitted = false;
+  release(status());
+  assert.deepEqual(await pending, { ok: false, error: { code: 'denied' } });
+});
+
+test('revoking owner authorization during a read suppresses its result', async () => {
+  let release, started;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  let authorized = true;
+  const h = harness({
+    timeoutMs: 1000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      authorize: () => authorized,
+      readStatus: async () => { started(); return held; },
+    }) },
+  });
+  const pending = read(h);
+  await entered;
+  authorized = false;
+  release(status());
+  assert.deepEqual(await pending, { ok: false, error: { code: 'denied' } });
+});
+
 test('unavailable owner and owner read errors never become success', async () => {
   assert.equal((await read(harness({ adapters: {} }))).error.code, 'unavailable');
   assert.equal((await read(harness({ adapters: { [capabilityId]: fixtureAdapter({ readStatus: () => { throw Error('offline'); } }) } }))).error.code, 'unavailable');
@@ -113,6 +151,34 @@ test('invalid, unexpected and oversized owner responses fail closed', async () =
     adapters: { [capabilityId]: fixtureAdapter({ readStatus: async () => ({ ...status(), state: 'degraded' }) }) },
   });
   assert.equal((await read(capped)).error.code, 'invalid_response');
+});
+
+test('opt-in health freshness rejects stale and future fixture observations', async () => {
+  const now = new Date().toISOString();
+  const recent = harness({
+    maxStatusAgeMs: 60000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => ({ state: 'ok', observed_at: now }),
+    }) },
+  });
+  assert.equal((await read(recent)).ok, true);
+  for (const observed_at of [
+    new Date(Date.now() - 120000).toISOString(),
+    new Date(Date.now() + 120000).toISOString(),
+  ]) {
+    const stale = harness({
+      maxStatusAgeMs: 60000,
+      adapters: { [capabilityId]: fixtureAdapter({
+        readStatus: async () => ({ state: 'ok', observed_at }),
+      }) },
+    });
+    assert.equal((await read(stale)).error.code, 'invalid_response');
+  }
+  // Existing fixture contracts retain their legacy behavior unless enabled.
+  assert.equal((await read(harness())).ok, true);
+  for (const maxStatusAgeMs of [0, 999, -1, 86400001, 1.5, '60000', Infinity]) {
+    assert.throws(() => harness({ maxStatusAgeMs }), TypeError);
+  }
 });
 
 test('hung owner decisions and reads have bounded typed timeouts', async () => {
@@ -204,4 +270,373 @@ test('owner data is captured once and returned as inert primitives', async () =>
   assert.equal(result.ok, true);
   source.state = 'degraded';
   assert.deepEqual(result.data, status(), 'the returned result must not alias owner-controlled data');
+});
+
+test('hostile adapter registry prototype traps yield a generic construction error', () => {
+  let trapCalls = 0;
+  const hostile = new Proxy({}, {
+    getPrototypeOf() {
+      trapCalls++;
+      throw new Error('sensitive owner registry detail');
+    },
+  });
+  assert.throws(
+    () => harness({ adapters: hostile }),
+    error => error instanceof TypeError && error.message === 'invalid synthetic harness options',
+  );
+  assert.equal(trapCalls, 1, 'validation may inspect the registry but never authorize an owner');
+});
+
+test('untrusted adapter descriptors fail closed without calling registry getters or throwing', async () => {
+  let getterCalls = 0;
+  const registry = Object.defineProperty({}, capabilityId, {
+    enumerable: true,
+    get() { getterCalls++; throw Error('untrusted registration getter'); },
+  });
+  const fromGetter = await read(harness({ adapters: registry }));
+  assert.deepEqual(fromGetter, { ok: false, error: { code: 'unavailable' } });
+  assert.equal(getterCalls, 0, 'registration getter must never run');
+
+  const hostileRegistry = new Proxy({}, {
+    getOwnPropertyDescriptor() { throw Error('registry proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: hostileRegistry }))).error.code, 'unavailable');
+
+  const hostileAdapter = new Proxy({}, {
+    ownKeys() { throw Error('adapter proxy trap'); },
+  });
+  assert.equal((await read(harness({ adapters: { [capabilityId]: hostileAdapter } }))).error.code, 'unavailable');
+});
+
+test('owner accessors and inherited functions cannot masquerade as approved adapter methods', async () => {
+  let getterCalls = 0;
+  const authorizeGetter = Object.defineProperty({ readStatus: async () => status() }, 'authorize', {
+    enumerable: true,
+    get() { getterCalls++; return () => true; },
+  });
+  const readGetter = Object.defineProperty({ authorize: () => true }, 'readStatus', {
+    enumerable: true,
+    get() { getterCalls++; return async () => status(); },
+  });
+  const inherited = Object.create({ authorize: () => true, readStatus: async () => status() });
+  for (const adapter of [authorizeGetter, readGetter, inherited]) {
+    const response = await read(harness({ adapters: { [capabilityId]: adapter } }));
+    assert.equal(response.error.code, 'unavailable');
+  }
+  assert.equal(getterCalls, 0, 'owner adapter getters must never run');
+});
+
+test('method snapshot preserves adapter receiver and cannot be swapped mid-authorization', async () => {
+  const adapter = {
+    allowed: true,
+    authorize() {
+      this.readStatus = () => { throw Error('method changed after authorization'); };
+      return this.allowed;
+    },
+    async readStatus() { return status(); },
+  };
+  const result = await read(harness({ adapters: { [capabilityId]: adapter } }));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+});
+
+test('manifest snapshots reject getters without executing them', () => {
+  let getterCalls = 0;
+  const parentGetter = Object.defineProperty({ ...manifest }, 'schema_version', {
+    enumerable: true,
+    get() { getterCalls++; return 'mesh.capabilities.v1'; },
+  });
+  const arrayGetter = [...manifest.capabilities];
+  Object.defineProperty(arrayGetter, '0', {
+    enumerable: true,
+    get() { getterCalls++; return manifest.capabilities[0]; },
+  });
+  const capGetter = Object.defineProperty({ ...manifest.capabilities[0] }, 'id', {
+    enumerable: true,
+    get() { getterCalls++; return capabilityId; },
+  });
+  for (const invalid of [
+    parentGetter,
+    { ...manifest, capabilities: arrayGetter },
+    { ...manifest, capabilities: [capGetter] },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+  assert.equal(getterCalls, 0, 'manifest getters must not execute');
+});
+
+test('proxy traps, undeclared array data and sparse manifests fail closed', () => {
+  const throwing = new Proxy({}, {
+    ownKeys() { throw Error('manifest proxy trap'); },
+  });
+  const throwingCapability = new Proxy({}, {
+    ownKeys() { throw Error('capability proxy trap'); },
+  });
+  const sparse = new Array(2);
+  sparse[0] = manifest.capabilities[0];
+  const extra = [...manifest.capabilities];
+  extra.hidden = 'unexpected';
+  const symbol = [...manifest.capabilities];
+  symbol[Symbol('hidden')] = true;
+  for (const invalid of [
+    throwing,
+    { ...manifest, capabilities: [throwingCapability] },
+    { ...manifest, capabilities: sparse },
+    { ...manifest, capabilities: extra },
+    { ...manifest, capabilities: symbol },
+  ]) {
+    assert.throws(() => validateManifest(invalid), TypeError);
+  }
+});
+
+test('validated discovery cannot be changed through original manifest mutation', () => {
+  const mutable = {
+    ...manifest,
+    capabilities: manifest.capabilities.map(capability => ({ ...capability })),
+  };
+  const h = createSyntheticHarness({ manifest: mutable });
+  const before = h.discover();
+  mutable.capabilities[0].owner = 'fixture.changed';
+  mutable.capabilities[0].evidence_status = 'verified';
+  mutable.capabilities.splice(0, 1);
+  assert.deepEqual(h.discover(), before);
+  assert.equal(h.discover()[0].evidence_status, 'prototype');
+});
+
+test('harness options reject getters, symbols and proxy traps before evaluating them', () => {
+  let invoked = 0;
+  const options = {
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+  };
+  for (const field of ['manifest', 'adapters', 'meshPermit', 'timeoutMs', 'maxResponseBytes']) {
+    const poisoned = Object.defineProperty({ ...options }, field, {
+      enumerable: true,
+      get() { invoked++; throw Error('untrusted configuration getter'); },
+    });
+    assert.throws(() => createSyntheticHarness(poisoned), TypeError);
+  }
+  assert.equal(invoked, 0, 'construction must not invoke outer-option getters');
+  const throwing = new Proxy({}, { ownKeys() { throw Error('options proxy trap'); } });
+  const symbol = { ...options, [Symbol('hidden')]: true };
+  const hidden = Object.defineProperty({ ...options }, 'secret', { value: 'unapproved' });
+  const inherited = Object.create({ manifest });
+  for (const invalid of [throwing, symbol, hidden, inherited, null, []]) {
+    assert.throws(() => createSyntheticHarness(invalid), TypeError);
+  }
+});
+
+test('explicit undefined options retain safe default behavior', async () => {
+  const h = createSyntheticHarness({
+    manifest,
+    adapters: { [capabilityId]: fixtureAdapter() },
+    meshPermit: () => true,
+    timeoutMs: undefined,
+    maxResponseBytes: undefined,
+  });
+  const result = await read(h);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data, status());
+  const defaultDeny = createSyntheticHarness({ manifest, meshPermit: undefined });
+  assert.equal((await read(defaultDeny)).error.code, 'denied');
+});
+
+test('native admission never starts an excess Mesh permit or owner call', async () => {
+  let permitStarted;
+  let permitRelease;
+  const entered = new Promise(resolve => { permitStarted = resolve; });
+  const blocked = new Promise(resolve => { permitRelease = resolve; });
+  let permitCalls = 0;
+  let ownerCalls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 1000,
+    meshPermit: async () => {
+      permitCalls++;
+      if (permitCalls === 1) { permitStarted(); await blocked; }
+      return true;
+    },
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => { ownerCalls++; return status(); },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.deepEqual(await read(h), { ok: false, error: { code: 'unavailable' } });
+  assert.equal(permitCalls, 1, 'over-capacity reads must not even call Mesh policy');
+  assert.equal(ownerCalls, 0);
+  permitRelease();
+  assert.equal((await first).ok, true);
+  assert.equal((await read(h)).ok, true, 'completed reads release the slot');
+  assert.equal(ownerCalls, 2);
+});
+
+test('timed-out noncooperative owner stays charged until it actually settles', async () => {
+  let entered;
+  let settle;
+  const started = new Promise(resolve => { entered = resolve; });
+  const delayedOwner = new Promise(resolve => { settle = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 20,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => {
+        calls++;
+        if (calls === 1) {
+          entered();
+          return delayedOwner; // deliberately ignores abort
+        }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await first).error.code, 'timed_out');
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await read(h)).error.code, 'unavailable');
+  }
+  assert.equal(calls, 1, 'timeout must not admit duplicate owner work');
+  settle(status());
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true, 'settled owner releases its slot');
+  assert.equal(calls, 2);
+});
+
+test('pending authorization remains charged after timeout until policy returns', async () => {
+  let begun;
+  let resolvePolicy;
+  const entered = new Promise(resolve => { begun = resolve; });
+  const held = new Promise(resolve => { resolvePolicy = resolve; });
+  let permits = 0;
+  let ownerCalls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 15,
+    meshPermit: async () => {
+      permits++;
+      if (permits === 1) { begun(); await held; }
+      return true;
+    },
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => { ownerCalls++; return status(); },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal(permits, 1);
+  resolvePolicy();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ownerCalls, 0, 'late policy must not trigger aborted owner work');
+  assert.equal((await read(h)).ok, true);
+  assert.equal(ownerCalls, 1);
+});
+
+test('late rejected noncooperative owner read is consumed and frees the slot', async () => {
+  let begun;
+  let rejectRead;
+  const entered = new Promise(resolve => { begun = resolve; });
+  const held = new Promise((_resolve, reject) => { rejectRead = reject; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 1,
+    timeoutMs: 15,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: () => {
+        calls++;
+        if (calls === 1) { begun(); return held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await entered;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  rejectRead(new Error('private late owner failure'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true, 'late rejection releases capacity safely');
+  assert.equal(calls, 2);
+});
+
+test('per-actor fairness rejects excess same-actor work while admitting other actors', async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 2,
+    maxConcurrentPerActor: 1,
+    timeoutMs: 1000,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => {
+        calls++;
+        if (calls === 1) { entered(); await held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal((await read(h, 'fixture.other')).ok, true);
+  assert.equal(calls, 2, 'denied actor cannot start a second owner read');
+  release();
+  assert.equal((await first).ok, true);
+  assert.equal((await read(h)).ok, true, 'actor quota releases on settlement');
+});
+
+test('timed-out per-actor quota stays reserved until noncooperative owner settles', async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const h = harness({
+    maxConcurrentReads: 2,
+    maxConcurrentPerActor: 1,
+    timeoutMs: 20,
+    adapters: { [capabilityId]: fixtureAdapter({
+      readStatus: async () => {
+        calls++;
+        if (calls === 1) { entered(); await held; }
+        return status();
+      },
+    }) },
+  });
+  const first = read(h);
+  await started;
+  assert.equal((await first).error.code, 'timed_out');
+  assert.equal((await read(h)).error.code, 'unavailable');
+  assert.equal(calls, 1);
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await read(h)).ok, true);
+  assert.equal(calls, 2);
+});
+
+test('per-actor admission rejects invalid limits', () => {
+  for (const maxConcurrentPerActor of [0, -1, 1.5, 3, '1', Infinity]) {
+    assert.throws(() => harness({ maxConcurrentReads: 2, maxConcurrentPerActor }), TypeError);
+  }
+  assert.equal(harness({ maxConcurrentPerActor: undefined }).discover().length, 2);
+});
+
+test('native admission rejects out-of-bounds limits while preserving explicit defaults', async () => {
+  for (const maxConcurrentReads of [0, -1, 1.5, 33, '8', Infinity]) {
+    assert.throws(() => harness({ maxConcurrentReads }), TypeError);
+  }
+  assert.equal((await read(harness({ maxConcurrentReads: undefined }))).ok, true);
+});
+
+test('native admission limit is descriptor-validated without invoking hostile getters', () => {
+  let invoked = 0;
+  const options = Object.defineProperty({ manifest }, 'maxConcurrentReads', {
+    get() { invoked++; throw Error('poisoned config'); },
+  });
+  assert.throws(() => createSyntheticHarness(options), TypeError);
+  assert.equal(invoked, 0);
 });

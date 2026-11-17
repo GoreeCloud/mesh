@@ -1,0 +1,49 @@
+name: Pinned Calendar Python and Mesh liveness-readiness contract (isolated)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  calendar-python-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Mesh without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Checkout source-reviewed Calendar at immutable draft commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/calendar
+          ref: bea6665b31b81fc9bf4310c3fc071b3c2ed519e6
+          path: calendar-source
+          persist-credentials: false
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify exact Calendar source commit and handler/schema blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C calendar-source rev-parse HEAD)" = 'bea6665b31b81fc9bf4310c3fc071b3c2ed519e6'
+          test "$(git -C calendar-source hash-object calendar_app/core.py)" = 'ac6be2c5d9c1a61b42a90ed77af7f86cf165cd65'
+          test "$(git -C calendar-source hash-object calendar_app/__main__.py)" = 'e9f25f562b1c73ebaa3462e8efbb8de1e6d53a7a'
+          python3 -m compileall -q calendar-source/calendar_app
+      - name: Exercise real isolated Calendar Python handler through Mesh fixtures
+        shell: bash
+        env:
+          GC_MESH_CALENDAR_ISOLATED_TEST: '1'
+        run: |
+          set -euo pipefail
+          node examples/owner-contracts/calendar-real-python.smoke.mjs ./calendar-source

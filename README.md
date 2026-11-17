@@ -7,7 +7,7 @@
 | Document type | Product vision and platform capabilities specification |
 | Product | GoreeCloud Mesh |
 | Responsible authority | GoreeCloud founder |
-| Status | Founder-directed platform vision; implementation and deployment unverified |
+| Status | Founder-directed platform vision; isolated source-authenticated development status tests; no deployed integration fabric |
 | Prepared | October 25, 2026 |
 | Version | Not assigned |
 | Canonical repository | [`GoreeCloud/mesh`](https://github.com/GoreeCloud/mesh) |
@@ -16,7 +16,19 @@
 
 **Engineering checkpoint:** [Evidence-based stability and release gates](docs/stability-gates.md) define safe implementation sequencing, ownership boundaries, and evidence required before claiming an operational Mesh capability.
 
-**Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises a strictly local, read-only contract and automated denial/failure tests. It does not connect to any GoreeCloud product or external system.
+**Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises strictly local, read-only discovery, fail-closed authorization, bounded concurrency and opt-in redacted diagnostic evidence. It does not itself connect to any product.
+
+**Source-owned development integration:** [Wardveil isolated health and scoped status v1 contracts](examples/owner-contracts/README.md) are exercised against the **actual SHA-pinned Wardveil Go development executable** in isolated hosted CI. Wardveil PR #26 added an opt-in third status-only bearer and source-observed status timestamp; Mesh PR #26 verifies the dedicated `/v1/status` contract, strict projection and header/body limits, denial of unauthorized event access, token rotation across controlled restart, outage/recovery, and in-memory private outcome diagnostics. Existing `/healthz` tests remain as a non-regression control. These are **not** a deployed service or a production connector: there is still no GoreeCloud Identity-based actor/tenant authorization, network TLS and process identity assurance, production secret lifecycle, privacy-policy acceptance or signed Stable release. [Mesh stability gates](docs/stability-gates.md) remain open.
+
+**Identity development acceptance:** [Pinned Identity signed-token gate](examples/identity-contracts/README.md) checks the actual source-owned Python ResourceAuthorizer at immutable Identity commit `703cb1b55f29e849d90f3281bb582cf33ee78804` with disposable RSA tokens before a synthetic Mesh status read. It verifies issuer, resource audience, OAuth client, signed tenant, scope, role, deny priority and expiry and cannot override the independent Mesh or owner permit. It does **not** connect Keycloak sessions or authenticated user identities to Wardveil's Go service.
+
+**Process deadline fixture:** [Fixed-code isolated synthetic owner](examples/synthetic/README.md) demonstrates a private Node child process with strictly bounded concurrent subprocesses, output and deadlines. Stalled or crashing child work can be forcibly terminated and capacity is retained until actual process closure. **Not an OS sandbox** or a deployable multi-tenant owner runtime; see [worker isolation issue #34](https://github.com/GoreeCloud/mesh/issues/34).
+
+A [restricted modern stateless JSON-RPC request fixture](docs/mcp-modern-stateless-fixture.md) extends the synthetic bridge with 2026-07-28 request metadata, discovery, read-only tool listing and invocation, host-injected admission and fail-closed negative tests. It has no transport, OAuth, real user data or external-client compatibility evidence. Draft legacy MCP PR #61 remains independent and requires reconciliation.
+
+## Experimental MCP-shaped read-only tool bridge
+
+The new [in-process synthetic MCP-shaped tool bridge](docs/mcp-synthetic-tool-bridge.md) maps Mesh's existing fictional read-only status capabilities into deterministic tool descriptors and fail-closed calls, without accepting model-supplied actor identities. It is not an MCP transport or a deployed endpoint; compatibility with external AI clients is **unverified**. The latest protocol revision considered is 2026-07-28, and transport/authorization remains a separate acceptance gate.
 
 ## 1. Overview
 
