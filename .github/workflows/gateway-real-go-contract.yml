@@ -62,15 +62,8 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           set -euo pipefail
-          go test -mod=readonly ./internal/gateway -run '^(TestAPIAuthenticationAndWriteGates|TestManagementHostAndAuthorizationHardening|TestIsolatedTrustedLocalHTTPS)
+          go test -mod=readonly ./internal/gateway -run '^(TestAPIAuthenticationAndWriteGates|TestManagementHostAndAuthorizationHardening|TestIsolatedTrustedLocalHTTPS)$' -count=1
           CGO_ENABLED=0 go build -mod=readonly -trimpath -buildvcs=false -o "$RUNNER_TEMP/gateway-console-dev" .
-      - name: Validate Mesh contract against the genuine Gateway console child
-        shell: bash
-        env:
-          GC_MESH_GATEWAY_ISOLATED_TEST: '1'
-        run: node examples/owner-contracts/gateway-real-go.smoke.mjs "$RUNNER_TEMP/gateway-console-dev"
- -count=1
-          go build -mod=readonly -trimpath -buildvcs=false -o "$RUNNER_TEMP/gateway-console-dev" ./cmd/console
       - name: Validate Mesh contract against the genuine Gateway console child
         shell: bash
         env:
