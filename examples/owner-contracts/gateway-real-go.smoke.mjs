@@ -1,4 +1,4 @@
-// CI-only source acceptance for the pinned genuine Go Gateway CONSOLE.
+// CI-only source acceptance for the pinned current Go Gateway control plane.
 // Never contacts production Gateway/Caddy, ACME, DNS or public interfaces.
 // Only an owned, disposable 127.0.0.1 child is started on an ephemeral port.
 import assert from 'node:assert/strict';
@@ -30,9 +30,14 @@ async function choosePort() {
 }
 
 function start(binary, directory, port, token) {
-  const child = spawn(binary, ['-listen', '127.0.0.1:' + port], {
+  const child = spawn(binary, [
+    'serve', '--listen', '127.0.0.1:' + port,
+    '--sites', join(directory, 'sites.json'),
+    '--state-dir', join(directory, 'gateway-state'),
+  ], {
     cwd: directory,
-    env: { GOREE_GATEWAY_CONSOLE_TOKEN: token },
+    env: { GATEWAY_ADMIN_TOKEN: token, HOME: directory,
+      PATH: process.env.PATH || '/usr/bin:/bin' },
     stdio: 'ignore',
   });
   child.on('error', () => {});
@@ -53,13 +58,13 @@ async function stop(child) {
   }
 }
 
-async function sourceRequest(port, path, { method = 'GET', token = '', origin = '' } = {}) {
-  assert.ok(['/healthz', '/api/v1/overview'].includes(path));
+async function sourceRequest(port, path, { method = 'GET', token = '', host = '' } = {}) {
+  assert.ok(['/api/health', '/api/status'].includes(path));
   assert.ok(['GET', 'POST'].includes(method));
   return new Promise((resolveData, reject) => {
     const headers = {};
     if (token) headers.Authorization = 'Bearer ' + token;
-    if (origin) headers['Sec-Fetch-Site'] = origin;
+    if (host) headers.Host = host;
     const req = httpRequest({
       host: '127.0.0.1', family: 4, port, path, method, headers, agent: false,
     }, res => {
@@ -106,11 +111,11 @@ async function main() {
     permit: () => ownerAllowed,
     clock: () => OBSERVED_AT,
     transport: async ({ method, path, signal }) => {
-      if (method !== 'GET' || path !== '/healthz' || signal?.aborted) {
+      if (method !== 'GET' || path !== '/api/health' || signal?.aborted) {
         throw new Error('invalid source contract operation');
       }
       transportCalls++;
-      return sourceRequest(port, '/healthz');
+      return sourceRequest(port, '/api/health');
     },
   });
   const harness = createSyntheticHarness({
@@ -149,26 +154,29 @@ async function main() {
       await sleep(100);
     }
     assert.ok(healthy, 'reviewed Gateway console did not start on isolated loopback');
-    const live = await sourceRequest(port, '/healthz');
+    const live = await sourceRequest(port, '/api/health');
     assert.equal(live.status, 200);
     assert.equal(live.contentType, 'application/json; charset=utf-8');
     assert.equal(live.body, BODY);
-    assert.equal((await sourceRequest(port, '/healthz', { method: 'POST' })).status, 405);
-    assert.equal((await sourceRequest(port, '/api/v1/overview')).status, 401);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
+    assert.equal((await sourceRequest(port, '/api/health', { method: 'POST' })).status, 401);
+    assert.equal((await sourceRequest(port, '/api/status')).status, 401);
+    assert.equal((await sourceRequest(port, '/api/status',
       { token: 'incorrect' })).status, 401);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
+    assert.equal((await sourceRequest(port, '/api/status',
       { token, method: 'POST' })).status, 405);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
-      { token, origin: 'cross-site' })).status, 403);
-    // This valid-token call may return "unreachable" because the pinned
-    // console's default local admin API is NOT started. Never confuse
-    // successful console auth with live Caddy ingress/route availability.
-    const authorized = await sourceRequest(port, '/api/v1/overview', { token });
+    assert.equal((await sourceRequest(port, '/api/status',
+      { token, host: 'untrusted.example' })).status, 403);
+    // Valid token proves only local control-plane status, never ingress availability.
+    const authorized = await sourceRequest(port, '/api/status', { token });
     assert.equal(authorized.status, 200);
     const projection = JSON.parse(authorized.body);
-    assert.ok(['unreachable', 'connected'].includes(projection.state));
-    assert.equal(projection.api_version, 'v1');
+    assert.deepEqual(Object.keys(projection).sort(),
+      ['engine', 'management', 'name', 'running', 'siteCount', 'version', 'writable'].sort());
+    assert.equal(projection.management, 'loopback');
+    assert.equal(projection.engine, 'Caddy v2');
+    assert.equal(projection.running, false);
+    assert.equal(projection.writable, false);
+    assert.equal(projection.siteCount, 0);
     assert.equal('raw_config' in projection, false);
 
     ownerAllowed = false;
@@ -189,7 +197,7 @@ async function main() {
       await sleep(100);
     }
     assert.ok(recovered, 'disposable Gateway console did not recover after restart');
-    process.stdout.write('PASS: pinned Gateway console/Mesh local liveness and denial\n');
+    process.stdout.write('PASS: current pinned Gateway/Mesh local liveness and denial\n');
   } finally {
     await stop(child);
     await rm(directory, { recursive: true, force: true });
