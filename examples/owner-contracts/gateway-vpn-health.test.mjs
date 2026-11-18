@@ -9,7 +9,7 @@ const plans = [
   {
     label: 'Gateway control plane', owner: 'gateway', capability: 'gateway.health',
     source: 'GoreeCloud/gateway',
-    blob: '5ff8ff63f321499d87d49df0664d0715e79b206d',
+    blob: '0c6a3e108d8f8b52746665e57355e1672c84b882',
     path: '/api/health',
     adapter: createGatewayHealthFixtureAdapter, contract: GATEWAY_HEALTH_CONTRACT,
     body: '{"ok":true}\n',
