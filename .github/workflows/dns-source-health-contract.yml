@@ -14,29 +14,37 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Checkout exact reviewed first-party DNS source
+      - name: Checkout exact first-party DNS wrapper and pinned upstream source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/DNS
-          ref: 9bde4884363b79703d76f130e8db0d6625d42884
+          # Current public DNS implementation keeps unmodified Technitium
+          # sources in a gitlink; the former top-level source commit is gone.
+          ref: 8cfe73f2ee2a903e8e0feb81dcb2f80265c73b46
           path: dns-source
+          submodules: true
           persist-credentials: false
       - name: Setup Node 24 for synthetic boundary tests
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - name: Verify immutable DNS health endpoint source and API documentation
+      - name: Verify immutable wrapper gitlinks and Technitium health source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C dns-source rev-parse HEAD)" = '9bde4884363b79703d76f130e8db0d6625d42884'
-          test "$(git -C dns-source hash-object DnsServerCore/WebServiceApi.cs)" = '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40'
-          test "$(git -C dns-source hash-object APIDOCS.md)" = 'fb1e769a04fc00e384189cee9f417532a4c75a22'
-          grep -Fq 'MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync)' dns-source/DnsServerCore/DnsWebService.cs
-          grep -Fq 'public async Task HealthCheckAsync(HttpContext context)' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN))' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DnsClient: View' dns-source/APIDOCS.md
-          grep -Fq '/api/dnsClient/healthCheck' dns-source/APIDOCS.md
+          dns='dns-source'
+          server='dns-source/upstream/DnsServer'
+          test "$(git -C "$dns" rev-parse HEAD)" = '8cfe73f2ee2a903e8e0feb81dcb2f80265c73b46'
+          test "$(git -C "$dns" rev-parse HEAD:upstream/DnsServer)" = 'c11fec68b7d64b728d74028b754c94f2ef9b36b1'
+          test "$(git -C "$dns" rev-parse HEAD:upstream/TechnitiumLibrary)" = '4a5a530ac6c4114e72216e0b9c74208a7a5e3fa0'
+          test "$(git -C "$server" rev-parse HEAD)" = 'c11fec68b7d64b728d74028b754c94f2ef9b36b1'
+          test "$(git -C "$server" hash-object DnsServerCore/WebServiceApi.cs)" = '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40'
+          test "$(git -C "$server" hash-object APIDOCS.md)" = 'fb1e769a04fc00e384189cee9f417532a4c75a22'
+          grep -Fq 'MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync)' "$server/DnsServerCore/DnsWebService.cs"
+          grep -Fq 'public async Task HealthCheckAsync(HttpContext context)' "$server/DnsServerCore/WebServiceApi.cs"
+          grep -Fq 'DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN))' "$server/DnsServerCore/WebServiceApi.cs"
+          grep -Fq 'DnsClient: View' "$server/APIDOCS.md"
+          grep -Fq '/api/dnsClient/healthCheck' "$server/APIDOCS.md"
       - name: Validate default-deny minimal DNS projection against source-pinned fixture
         shell: bash
         env:
