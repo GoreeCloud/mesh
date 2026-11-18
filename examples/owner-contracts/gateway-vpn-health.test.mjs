@@ -7,9 +7,10 @@ import { createVPNHealthFixtureAdapter, VPN_HEALTH_CONTRACT } from './vpn-health
 const seenAt = '2026-11-09T12:00:00.000Z';
 const plans = [
   {
-    label: 'Gateway console', owner: 'gateway', capability: 'gateway.health',
+    label: 'Gateway control plane', owner: 'gateway', capability: 'gateway.health',
     source: 'GoreeCloud/gateway',
-    blob: '45b7104824efcbf0019f93334546070a6ca0c561',
+    blob: '5ff8ff63f321499d87d49df0664d0715e79b206d',
+    path: '/api/health',
     adapter: createGatewayHealthFixtureAdapter, contract: GATEWAY_HEALTH_CONTRACT,
     body: '{"ok":true}\n',
   },
@@ -17,6 +18,7 @@ const plans = [
     label: 'VPN management', owner: 'vpn', capability: 'vpn.health',
     source: 'GoreeCloud/VPN',
     blob: 'd43c64e12c750205adc567e1cb4ba8ab4923685c',
+    path: '/healthz',
     adapter: createVPNHealthFixtureAdapter, contract: VPN_HEALTH_CONTRACT,
     body: '{"status":"ok","maturity":"alpha","component":"management"}',
   },
@@ -49,7 +51,7 @@ for (const item of plans) {
     assert.equal(item.contract.source, item.source);
     assert.equal(item.contract.source_blob, item.blob);
     assert.equal(item.contract.method, 'GET');
-    assert.equal(item.contract.path, '/healthz');
+    assert.equal(item.contract.path, item.path);
     assert.equal(item.contract.mode, 'transport-injected-nonproduction');
   });
 
@@ -61,7 +63,7 @@ for (const item of plans) {
         calls++;
         assert.deepEqual(Object.keys(params).sort(), ['method', 'path', 'signal']);
         assert.equal(params.method, 'GET');
-        assert.equal(params.path, '/healthz');
+        assert.equal(params.path, item.path);
         assert.equal(params.signal.aborted, false);
         return response(item.body);
       },
