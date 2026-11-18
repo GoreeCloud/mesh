@@ -1,6 +1,6 @@
 // Source-observed GoreeCloud DNS CLIENT health: a local A query succeeds.
 // Not evidence of DoH, DoT, DoQ, public DNS, DNSSEC or external availability.
-// Pinned to DNS WebServiceApi.cs Git blob 333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40
+// Pinned to reviewed GoreeCloud/DNS 8cfe73f2... Technitium DnsServer submodule c11fec68...\n// and its unchanged WebServiceApi.cs Git blob 333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40
 // and APIDOCS.md Git blob fb1e769a04fc00e384189cee9f417532a4c75a22.
 // A trusted caller injects a transport; this module has no URLs, sockets,
 // credentials, fetch, raw server name output or live DNS connections.
