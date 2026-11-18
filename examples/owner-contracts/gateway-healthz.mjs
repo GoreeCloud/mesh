@@ -5,7 +5,7 @@ import { createExactHealthFixtureAdapter } from './exact-health-fixture.mjs';
 
 export const GATEWAY_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/gateway',
-  source_blob: '45b7104824efcbf0019f93334546070a6ca0c561',
+  source_blob: '5ff8ff63f321499d87d49df0664d0715e79b206d',
   method: 'GET',
   path: '/api/health',
   mode: 'transport-injected-nonproduction',
