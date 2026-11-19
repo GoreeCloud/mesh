@@ -1,0 +1,69 @@
+name: Source-pinned Calendar redacted-preview privacy contract (synthetic only)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  calendar-preview-privacy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Mesh without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Checkout immutable reviewed Calendar preview branch commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: GoreeCloud/calendar
+          ref: cae388d173853d7aefaba41b4460564a28673662
+          path: calendar-source
+          persist-credentials: false
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Setup Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify source commit, authoritative handler blob and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C calendar-source rev-parse HEAD)" = 'cae388d173853d7aefaba41b4460564a28673662'
+          test "$(git -C calendar-source hash-object calendar_app/core.py)" = '9fc93fd255c7c45bf11d82a86480523509a846fb'
+          python3 -m py_compile calendar-source/calendar_app/core.py
+          python3 -m py_compile examples/owner-contracts/calendar-redacted-preview-loopback.py
+          node --check examples/owner-contracts/calendar-redacted-preview.mjs
+          node --check examples/owner-contracts/calendar-redacted-preview-real.smoke.mjs
+      - name: Source-owned Calendar redacted import preview unit contract
+        shell: bash
+        env:
+          PYTHONNOUSERSITE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          cd calendar-source
+          python3 -m unittest tests.test_api.CalendarAPITests.test_import_previews_are_permission_scoped_and_do_not_mutate -v
+      - name: Fail-closed Mesh fixture unit suite
+        shell: bash
+        env:
+          GC_MESH_CALENDAR_PREVIEW_FIXTURE: '1'
+        run: |
+          set -euo pipefail
+          npm test
+      - name: Exercise real isolated Calendar Python HTTP source with Mesh gates
+        shell: bash
+        env:
+          GC_MESH_CALENDAR_PREVIEW_FIXTURE: '1'
+          PYTHONNOUSERSITE: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          node examples/owner-contracts/calendar-redacted-preview-real.smoke.mjs ./calendar-source
