@@ -69,7 +69,8 @@ export async function boundedBody(request) {
   let reader;
   try {
     reader = request.body.getReader();
-    let chunks = [], size = 0, count = 0, expired = false;
+    const chunks = [];
+    let size = 0, count = 0, expired = false;
     // Bound slow clients as well as raw bytes/chunk fragmentation.
     const deadline = setTimeout(() => {
       expired = true;
@@ -81,11 +82,11 @@ export async function boundedBody(request) {
         if (expired) return error(408, 'Request timed out.');
         if (done) break;
         count++;
-        if (!(value instanceof Uint8Array) || ++size > MAX_BODY_BYTES) {
+        if (!(value instanceof Uint8Array)) {
           reader.cancel().catch(() => {});
           return error(413, 'Request too large.');
         }
-        size += value.byteLength - 1;
+        size += value.byteLength;
         if (size > MAX_BODY_BYTES || count > 64) {
           reader.cancel().catch(() => {});
           return error(413, 'Request too large.');

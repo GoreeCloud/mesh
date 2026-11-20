@@ -44,5 +44,7 @@ test('per-isolate admission is bounded and releases are idempotent', () => {
   assert.equal(typeof next, 'function');
   next();
   for (const release of releases) release();
-  assert.equal(typeof acquireSlot(), 'function');
+  const finalSlot = acquireSlot();
+  assert.equal(typeof finalSlot, 'function');
+  finalSlot();
 });
