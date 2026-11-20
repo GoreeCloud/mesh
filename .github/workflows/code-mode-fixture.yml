@@ -33,16 +33,10 @@ jobs:
           node-version: '24'
       - name: Install scoped dependencies without lifecycle scripts
         working-directory: code-mode
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Bundle Worker without deploying or accessing credentials
         working-directory: code-mode
         run: npm run build
-      - name: Emit public package lock for reproducibility review
-        working-directory: code-mode
-        run: |
-          echo GOREEMESH_LOCK_BEGIN
-          cat package-lock.json
-          echo GOREEMESH_LOCK_END
       - name: Audit production dependencies
         working-directory: code-mode
         run: npm audit --omit=dev --audit-level=high

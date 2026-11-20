@@ -29,7 +29,7 @@ export default {
         spec: OPENAPI,
         name: 'goreecloud-mesh-codemode-fixture',
         version: '0.1.0',
-        executor: new DynamicWorkerExecutor({ loader: env.LOADER }),
+        executor: new DynamicWorkerExecutor({ loader: env.LOADER, globalOutbound: null }),
         request: createReadOnlyRequest(),
         description: 'Synthetic read-only GoreeCloud Mesh fixture. No live service data or writes.',
       });
