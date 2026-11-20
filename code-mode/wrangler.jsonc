@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "goreecloud-mesh-codemode-prototype",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "workers_dev": false,
+  "observability": { "enabled": false }
+}

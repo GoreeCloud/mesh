@@ -1,0 +1,53 @@
+name: Cloudflare Code Mode fixture
+on:
+  pull_request:
+    paths:
+      - 'code-mode/**'
+      - '.github/workflows/code-mode-fixture.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'code-mode/**'
+      - '.github/workflows/code-mode-fixture.yml'
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: node --test code-mode/test/*.test.mjs
+  worker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install scoped dependencies without lifecycle scripts
+        working-directory: code-mode
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Bundle Worker without deploying or accessing credentials
+        working-directory: code-mode
+        run: npm run build
+      - name: Exercise local-only MCP protocol and read-only sandbox
+        working-directory: code-mode
+        run: node test/local-smoke.mjs
+      - name: Verify dependency provenance and summarize licenses
+        working-directory: code-mode
+        run: node scripts/review-dependencies.mjs
+      - name: Generate machine-readable CycloneDX SBOM
+        working-directory: code-mode
+        run: |
+          npm sbom --omit=dev --sbom-format=cyclonedx > .wrangler-dryrun/mesh-codemode.sbom.cdx.json
+          node -e 'const fs=require("node:fs");const s=JSON.parse(fs.readFileSync(".wrangler-dryrun/mesh-codemode.sbom.cdx.json","utf8"));if(s.bomFormat!=="CycloneDX"||!Array.isArray(s.components)||s.components.length<1)process.exit(1);console.log("Validated CycloneDX components:",s.components.length)'
+      - name: Audit production dependencies
+        working-directory: code-mode
+        run: npm audit --omit=dev --audit-level=high
