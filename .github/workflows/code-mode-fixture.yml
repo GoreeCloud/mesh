@@ -37,6 +37,9 @@ jobs:
       - name: Bundle Worker without deploying or accessing credentials
         working-directory: code-mode
         run: npm run build
+      - name: Exercise local-only MCP protocol and read-only sandbox
+        working-directory: code-mode
+        run: node test/local-smoke.mjs
       - name: Audit production dependencies
         working-directory: code-mode
         run: npm audit --omit=dev --audit-level=high
