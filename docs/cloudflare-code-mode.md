@@ -32,7 +32,13 @@ node scripts/review-dependencies.mjs
 npm audit --omit=dev --audit-level=high
 ```
 
-The audited `code-mode/package-lock.json` was generated in isolated GitHub CI (281 package records, npm-registry downloads with integrity hashes). CI uses `npm ci --ignore-scripts` and runs `npm audit --omit=dev --audit-level=high`; its first audited build reported zero production vulnerabilities. The source-tree license inventory flags non-permissive, undeclared or unusual SPDX values for human review; it does not authorize redistribution. CI also generates a CycloneDX SBOM from the installed production tree. Audits are point-in-time observations, not guarantees. The build dry-run does not authenticate to or deploy on Cloudflare. Local smoke starts only a disposable loopback `workerd` with a random `.dev.vars` fixture credential and removes it afterward.
+The audited `code-mode/package-lock.json` was generated in isolated GitHub CI (281 package records, npm-registry downloads with integrity hashes). CI uses `npm ci --ignore-scripts` and runs `npm audit --omit=dev --audit-level=high`; its first audited build reported zero production vulnerabilities. The source-tree license inventory flags non-permissive, undeclared or unusual SPDX values for human review; it does not authorize redistribution. CI also generates a CycloneDX SBOM from the installed production tree. The reproducible production inventory recorded 192 locked package entries, 171 locally installed packages and 166 SBOM components at the audited review head; the separate package-license review is maintained in [third-party notices](../code-mode/THIRD_PARTY_NOTICES.md). Audits are point-in-time observations, not guarantees. The build dry-run does not authenticate to or deploy on Cloudflare. Local smoke starts only a disposable loopback `workerd` with a random `.dev.vars` fixture credential and removes it afterward.
+
+## Cloudflare billing and execution ownership
+
+Cloudflare [Dynamic Workers pricing](https://developers.cloudflare.com/dynamic-workers/pricing/) currently requires a paid Workers plan and charges for Dynamic Workers created, invocation volume and CPU use. **No GoreeCloud paid Cloudflare enrollment, billing authorization or deployment is implied by this prototype.** Retain an optional Mesh integration adapter so the core ecosystem remains self-hosted and usable without this provider. A separately approved budget, spending limit, billing alert and graceful disable/rollback are mandatory before any Cloudflare staging or live provisioning.
+
+Local `wrangler dev` uses Miniflare, which Cloudflare expressly says is **not a hardened isolation boundary** for arbitrary untrusted JavaScript. CI uses only fixed reviewed code in this repository; never test real model-authored code on a personal laptop or production VPS. Local runtime success does not establish production isolation.
 
 ## Controlled staging (requires separate security acceptance)
 

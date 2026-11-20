@@ -14,6 +14,7 @@ const entries = Object.entries(lock.packages ?? {}).filter(([path, p]) => path &
 const permissive = new Set([
   'MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause',
   'ISC', '0BSD', 'CC0-1.0', 'Unlicense', 'Zlib', 'BlueOak-1.0.0',
+  'MIT-0', // verified MIT No Attribution SPDX license
 ]);
 const review = new Map();
 let registry = 0, verified = 0, installed = 0;
