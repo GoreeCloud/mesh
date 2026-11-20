@@ -28,9 +28,11 @@ cd code-mode
 npm ci --ignore-scripts --no-audit --no-fund
 npm run build
 node test/local-smoke.mjs # runs only reviewed synthetic code in local workerd
+node scripts/review-dependencies.mjs
+npm audit --omit=dev --audit-level=high
 ```
 
-The audited `code-mode/package-lock.json` was generated in isolated GitHub CI (281 package records, npm-registry downloads with integrity hashes). CI uses `npm ci --ignore-scripts` and runs `npm audit --omit=dev --audit-level=high`; its first audited build reported zero production vulnerabilities. Audits are point-in-time observations, not guarantees. The build dry-run does not authenticate to or deploy on Cloudflare. Local smoke starts only a disposable loopback `workerd` with a random `.dev.vars` fixture credential and removes it afterward.
+The audited `code-mode/package-lock.json` was generated in isolated GitHub CI (281 package records, npm-registry downloads with integrity hashes). CI uses `npm ci --ignore-scripts` and runs `npm audit --omit=dev --audit-level=high`; its first audited build reported zero production vulnerabilities. The source-tree license inventory flags non-permissive, undeclared or unusual SPDX values for human review; it does not authorize redistribution. CI also generates a CycloneDX SBOM from the installed production tree. Audits are point-in-time observations, not guarantees. The build dry-run does not authenticate to or deploy on Cloudflare. Local smoke starts only a disposable loopback `workerd` with a random `.dev.vars` fixture credential and removes it afterward.
 
 ## Controlled staging (requires separate security acceptance)
 
