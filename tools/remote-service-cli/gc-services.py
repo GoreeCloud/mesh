@@ -67,6 +67,9 @@ def private_file(service):
 def credential(service):
     path = private_file(service)
     try:
+        st_dir = CONF.lstat()
+        if not stat.S_ISDIR(st_dir.st_mode) or st_dir.st_uid != os.getuid() or stat.S_IMODE(st_dir.st_mode) != 0o700:
+            fail("Credential directory must be a regular owner-only 0700 directory.")
         st = path.lstat()
         if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o600:
             fail("Credential file must be a regular, owner-only 0600 file.")
@@ -92,14 +95,16 @@ def opener():
     )
 
 def checked_path(service, path):
-    if not path.startswith(SERVICES[service][1]):
+    prefixes = ("/api/v1/", "/api/v2/") if service == "vikunja" else (SERVICES[service][1],)
+    if not path.startswith(prefixes):
         fail("API path is outside the service's permitted prefix.")
     parts = urllib.parse.urlsplit(path)
     decoded = urllib.parse.unquote(parts.path)
     if (parts.scheme or parts.netloc or parts.fragment or
         "\\" in decoded or "//" in decoded or ".." in decoded or
         any(ord(ch) < 32 for ch in decoded) or
-        not decoded.startswith(SERVICES[service][1])):
+        not decoded.startswith(prefixes) or
+        any(ord(ch) < 32 for ch in path)):
         fail("Unsafe API path.")
     return path
 
@@ -207,10 +212,49 @@ def caddy(args):
         run(prefix + ["reload", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"])
         print("Caddy reload command succeeded; independently verify routes and TLS. Candidate snapshot:", backup)
 
+def container(args):
+    """Bounded diagnostics without Docker environment, mounts or secrets."""
+    if args.action == "list":
+        print(run(["docker", "ps", "-a", "--format", "{{.Names}} | {{.Status}}"]))
+        return
+    if not args.name or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", args.name):
+        fail("A valid container name is required.")
+    names = run(["docker", "ps", "-a", "--format", "{{.Names}}"]).splitlines()
+    if args.name not in names:
+        fail("Container not found in local Docker inventory.")
+    if args.action == "status":
+        # Never print docker inspect whole objects: they can contain credentials.
+        print(run(["docker", "inspect", "--format",
+                   "{{.Name}} | {{.State.Status}} | {{if .State.Health}}{{.State.Health.Status}}{{else}}no healthcheck{{end}}",
+                   args.name]))
+    elif args.action == "logs":
+        if args.output is None:
+            fail("Container logs may contain secrets; use --output to save privately.")
+        if args.lines < 1 or args.lines > 200:
+            fail("Log tail must be between 1 and 200 lines.")
+        if args.output.exists() or args.output.is_symlink():
+            fail("Refusing to overwrite log output.")
+        # stdout+stderr together is bounded after process completion.
+        p = subprocess.run(["docker", "logs", "--tail", str(args.lines), args.name],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           check=False, timeout=15)
+        if p.returncode != 0 or len(p.stdout) > 2 * 1024 * 1024:
+            fail("Docker log capture failed or exceeded 2 MiB limit.")
+        fd = os.open(args.output, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "wb") as dest:
+            dest.write(p.stdout)
+        print("Private log snapshot saved; may contain sensitive data:", args.output)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Local private VPS service CLI; no passwords on command line")
     sp = ap.add_subparsers(dest="command", required=True)
     sp.add_parser("list", help="List supported services and observed Docker containers")
+    p = sp.add_parser("container", help="Read-only diagnostics for all installed Docker services")
+    p.add_argument("action", choices=["list", "status", "logs"])
+    p.add_argument("name", nargs="?")
+    p.add_argument("--lines", type=int, default=50)
+    p.add_argument("--output", type=Path, help="Private log file, non-overwriting 0600")
     sp.add_parser("doctor", help="Read-only public health, credentials present and Caddy syntax")
     for name, helptext in (("login", "Privately enroll a scoped credential"),
                             ("auth-check", "Validate an enrolled credential without revealing user data"),
@@ -224,6 +268,7 @@ def main():
     p.add_argument("--data-file", type=Path, help="Existing local JSON payload, not shell argument")
     p.add_argument("--output", type=Path, help="Create a new private output file (no overwrite)")
     p.add_argument("--confirm-write", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="Check the proposed API call without sending or reading credentials")
     p = sp.add_parser("caddy", help="Caddy syntax, route names, or guarded live reload")
     p.add_argument("action", choices=["routes", "validate", "reload"])
     p.add_argument("--confirm-write", action="store_true")
@@ -233,6 +278,8 @@ def main():
             print(n + " (authenticated API)")
         print("stirling (existing stirling-pdf CLI); caddy (Docker Caddyfile commands)")
         print(run(["docker", "ps", "--format", "{{.Names}} | {{.Status}}"]))
+    elif args.command == "container":
+        container(args)
     elif args.command == "doctor":
         for n, u in STATUS.items():
             http_status(n, u)
@@ -262,6 +309,18 @@ def main():
     elif args.command == "caddy":
         caddy(args)
     elif args.command == "api":
+        if args.service != "stirling":
+            checked_path(args.service, args.path)
+        if args.dry_run:
+            if args.data_file:
+                if not args.data_file.is_file() or args.data_file.stat().st_size > 2 * 1024 * 1024:
+                    fail("Payload must be an existing JSON file at most 2 MiB.")
+                try:
+                    json.loads(args.data_file.read_bytes())
+                except ValueError:
+                    fail("Payload is not valid JSON.")
+            print("Dry run passed: fixed service origin, scoped path, optional JSON file validated; no request sent.")
+            return
         if args.method in WRITE_METHODS and not args.confirm_write:
             fail("Writes require --confirm-write.")
         if args.method == "GET" and args.data_file:
