@@ -103,7 +103,7 @@ def checked_path(service, path):
         fail("Unsafe API path.")
     return path
 
-def request(service, method, path, data=None, cfg=None, output=None):
+def request(service, method, path, data=None, cfg=None, output=None, quiet=False):
     base, _, auth, _ = SERVICES[service]
     checked_path(service, path)
     headers = {"Accept": "application/json", "User-Agent": "GoreeCloud-service-cli/0.1"}
@@ -129,7 +129,7 @@ def request(service, method, path, data=None, cfg=None, output=None):
                     f.write(body)
                 print(f"HTTP {resp.status}; saved private output to {output}")
             else:
-                print(body.decode("utf-8", errors="replace") if body else f"HTTP {resp.status}")
+                if not quiet:\n                    print(body.decode("utf-8", errors="replace") if body else f"HTTP {resp.status}")
             return resp.status
     except urllib.error.HTTPError as e:
         fail(f"Service returned HTTP {e.code} (response body suppressed).")
@@ -151,7 +151,7 @@ def login(args):
     cfg["secret"] = secret
     try:
         # No credentials stored until the authenticated read succeeds.
-        request(service, "GET", SERVICES[service][3], cfg=cfg, output=None)
+        request(service, "GET", SERVICES[service][3], cfg=cfg, output=None, quiet=True)
     except SystemExit:
         fail("Credential not stored: authentication or API compatibility failed.")
     private_dir()
@@ -257,7 +257,7 @@ def main():
                 fail("Stirling wrapper does not support HEAD.")
             if not args.path.startswith("/api/v1/"):
                 fail("Invalid Stirling API path.")
-            print(run(["/home/ladamian/.local/bin/stirling-pdf", "api", args.method, args.path]))
+            print(run([str(Path.home() / ".local/bin" / "stirling-pdf"), "api", args.method, args.path]))
         else:
             data = None
             if args.data_file:
