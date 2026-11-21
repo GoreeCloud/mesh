@@ -273,6 +273,7 @@ def main():
     p.add_argument("path")
     p.add_argument("--data-file", type=Path, help="Existing local JSON payload, not shell argument")
     p.add_argument("--output", type=Path, help="Create a new private output file (no overwrite)")
+    p.add_argument("--show-data", action="store_true", help="Explicitly print potentially sensitive API response body")
     p.add_argument("--confirm-write", action="store_true")
     p.add_argument("--dry-run", action="store_true", help="Check the proposed API call without sending or reading credentials")
     p = sp.add_parser("caddy", help="Caddy syntax, route names, or guarded live reload")
@@ -354,8 +355,10 @@ def main():
                     json.loads(data)
                 except ValueError:
                     fail("Payload is not valid JSON.")
-            request(args.service, args.method, args.path, data=data,
-                    cfg=credential(args.service), output=args.output)
+            status_code = request(args.service, args.method, args.path, data=data,
+                    cfg=credential(args.service), output=args.output, quiet=not args.show_data)
+            if not args.show_data and args.output is None:
+                print(f"HTTP {status_code}; private response body suppressed. Use --show-data or --output.")
 
 if __name__ == "__main__":
     main()
