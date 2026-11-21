@@ -135,11 +135,42 @@ def api(args):
     if not path.startswith("/api/v1/") or any(c.isspace() for c in path) or \
        ".." in path or "@" in path or "://" in path or "//" in path or "#" in path:
         error("Only a relative /api/v1/... path on the fixed Stirling host is allowed.")
-    response = curl("--fail", "--request", args.method, BASE + path,
-                    header=credential_path, max_time=60)
+    # Use explicit operator intent for potentially destructive operations.
+    if args.method != "GET" and not getattr(args, "confirm_write", False):
+        error("API write methods require --confirm-write after checking scope and rollback.")
+    show_data = bool(getattr(args, "show_data", False))
+    output_name = getattr(args, "output", None)
+    if show_data and output_name:
+        error("Choose either --show-data or --output, not both.")
+    if output_name:
+        destination = Path(output_name).absolute()
+        if destination.exists() or destination.is_symlink():
+            error(f"Refusing to overwrite existing output: {destination}")
+        if not destination.parent.is_dir():
+            error(f"Output directory does not exist: {destination.parent}")
+        fd, tmp_name = tempfile.mkstemp(prefix=".stirling-api-", dir=destination.parent)
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            response = curl("--fail", "--max-filesize", "10485760", "--request", args.method,
+                            "--output", str(tmp), BASE + path,
+                            header=credential_path, max_time=60)
+            if response.returncode:
+                error(f"Stirling PDF API returned a curl error ({response.returncode}).")
+            # Atomic create, refusing to clobber a race-created destination.
+            os.link(tmp, destination, follow_symlinks=False)
+            print("Saved", destination)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return
+    opts = ["--fail", "--max-filesize", "1048576", "--request", args.method]
+    if not show_data:
+        opts += ["--output", "/dev/null", "--write-out", "HTTP %{http_code}\\n"]
+    response = curl(*opts, BASE + path, header=credential_path, max_time=60)
     if response.returncode:
         error(f"Stirling PDF API returned a curl error ({response.returncode}).")
-    print()
+    if show_data:
+        print()
 
 
 def logout(_):
@@ -165,9 +196,12 @@ def main():
     p.add_argument("output")
     p.add_argument("inputs", nargs="+")
     p.set_defaults(func=merge)
-    p = sub.add_parser("api", help="Call a fixed-origin API endpoint without leaking the key")
+    p = sub.add_parser("api", help="Call the fixed-origin API; response private by default")
     p.add_argument("method", choices=["GET", "POST", "PUT", "PATCH", "DELETE"])
     p.add_argument("path", help="Relative path under /api/v1/")
+    p.add_argument("--show-data", action="store_true", help="Explicitly print response body (may be private)")
+    p.add_argument("--output", help="Write response to a new, owner-only file; never overwrite")
+    p.add_argument("--confirm-write", action="store_true", help="Permit a reviewed non-GET API operation")
     p.set_defaults(func=api)
     args = parser.parse_args()
     if args.command == "merge" and len(args.inputs) < 2:
