@@ -1,0 +1,28 @@
+name: Stirling PDF temporary provider isolated contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/pdf-provider/**'
+      - '.github/workflows/pdf-provider-contract.yml'
+  pull_request:
+    paths:
+      - 'examples/pdf-provider/**'
+      - '.github/workflows/pdf-provider-contract.yml'
+permissions:
+  contents: read
+jobs:
+  pdf-provider-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed GoreeCloud Mesh source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # Existing reviewed Mesh SHA pin
+        with:
+          persist-credentials: false
+      - name: Setup Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # Existing reviewed Mesh SHA pin
+        with:
+          node-version: '24'
+      - name: Offline synthetic PDF contract tests
+        run: node --test examples/pdf-provider/adapter.test.mjs
