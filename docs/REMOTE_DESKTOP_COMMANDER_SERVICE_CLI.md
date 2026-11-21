@@ -124,6 +124,25 @@ gc-services logout vikunja
 
 Any payload and output examples are procedural patterns, not evidence the corresponding application operation was successfully executed. Before executing a real write, discover existing records, validate exact IDs and permissions, request only approved changes, preserve unrelated data, and read back the owning application. Plane's workspaces/projects and Vikunja's tasks should not be invented or duplicated.
 
+## AdGuard Home web-access readiness — observed November 20, 2026 (U.S. Central)
+
+**User report:** Firefox cannot load `adguard.goreecloud.com`, while `gc-services login adguard` requests a username. This is separate from the already verified Vikunja/Plane credentials.
+
+**Observed via authorized Remote Desktop Commander on VPS Mesh and laptop:** Porkbun authoritative DNS returned `NXDOMAIN` for `adguard.goreecloud.com`; the public Caddyfile contained no AdGuard site block. The AdGuard Docker container was running; the local management login page `http://127.0.0.1:3000/login.html` returned HTTP 200, and its unauthenticated `/control/status` returned 401 (authentication required). Caddy could reach `http://goreecloud-temp-adguard:3000/login.html` over their verified shared Docker network. Existing Vikunja/Plane scoped credentials both passed authenticated `gc-services auth-check`; AdGuard credentials were not enrolled. The laptop could reach the VPS SSH TCP port 22; it could not reach the public AdGuard admin port 3000 or DNS TCP 53 in limited probes. These observations do **not** certify a firewall policy or production DNS security.
+
+**Safe immediate private UI access** from a separately authorized laptop terminal, with the operator's verified SSH identity:
+
+```sh
+ssh -N -L 127.0.0.1:13000:127.0.0.1:3000 <VPS_SSH_USER>@<VERIFIED_VPS_HOST>
+# In laptop browser: http://127.0.0.1:13000/login.html
+```
+
+Verify the SSH host key before accepting a first connection. The local bind is loopback-only; keep the tunnel open while using the browser. Login needs the **AdGuard Home web account** (username and password), not Vikunja or Plane tokens. If the owner has not configured or does not know that account, do not reset it or expose configuration secrets without an independently authorized recovery procedure. Cancel the pending `gc-services login adguard` with Ctrl+C and enroll Stirling separately; this does not remove prior credentials.
+
+**Prepared but not activated:** On VPS Mesh a private `0600` config candidate resides at `~/.local/share/goreecloud/caddy-staging/Caddyfile.adguard-preview`. It includes a proposed site block for `adguard.goreecloud.com` proxying `goreecloud-temp-adguard:3000`. Caddy validated the candidate through stdin and returned `Valid configuration`. The original live `/opt/goreecloud-temp/Caddyfile` was unchanged; no reload, DNS write, firewall write, credential change or public cutover occurred. A candidate is not a rollback guarantee.
+
+**Controlled public-access option (not authorized or executed):** Add a Porkbun A record for host `adguard` targeting the verified VPS public IP, approve exposure and access-control design, then back up and carefully integrate/validate/reload the Caddy route with readback and rollback. Public access to DNS-filter administration is security-sensitive: prefer VPN/private access where possible, apply restricted identities and independent protections, and confirm HTTPS issuance and DNS propagation before declaring success. Never open AdGuard admin port 3000 to the internet merely to fix the hostname.
+
 ## Verification evidence
 
 Tests performed on the authorized VPS with Python 3.13.5:
