@@ -1,0 +1,50 @@
+name: Pinned first-party Go VPN health and Mesh contract (isolated)
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  vpn-go-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Checkout immutable reviewed first-party VPN source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: GoreeCloud/VPN
+          ref: c6407faa2cd4626362a7afd1cbf7dced2959aebd
+          path: vpn-source
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: vpn-source/go.mod
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Verify exact first-party source and immutable Go API contract
+        run: |
+          set -euo pipefail
+          test "$(git -C vpn-source rev-parse HEAD)" = "c6407faa2cd4626362a7afd1cbf7dced2959aebd"
+          test "$(git -C vpn-source hash-object internal/api/handler.go)" = "f1afbc60418bcdcab32a48e2b6358c595dd3175a"
+          grep -Fq 'module github.com/GoreeCloud/VPN' vpn-source/go.mod
+          grep -Fq '"tunnel_operational"' vpn-source/internal/api/handler.go
+          test ! -e vpn-source/deploy/netbird
+          test ! -e vpn-source/src/goreecloud_vpn/server.py
+      - name: Compile and run first-party Go management unit tests
+        run: |
+          cd vpn-source
+          go test -race -count=1 ./internal/api ./internal/control ./cmd/vpnd
+          go vet ./internal/api ./internal/control ./cmd/vpnd
+          go build -o ./vpnd-test ./cmd/vpnd
+      - name: Run Mesh synthetic negative and exact-source health tests
+        run: npm test
+      - name: Exercise owner-authorized Mesh liveness through real Go process
+        env:
+          GC_MESH_VPN_ISOLATED_TEST: '1'
+        run: node examples/owner-contracts/vpn-real-go.smoke.mjs ./vpn-source

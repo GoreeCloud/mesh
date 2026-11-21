@@ -101,21 +101,8 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
 
-## VPN endpoint source sync (November 9, 2026 — development-only)
+## First-party VPN Go health source — isolated development contract (November 21, 2026)
 
-A new isolated Mesh CI candidate advances the trusted `GoreeCloud/VPN`
-management source from `13973c531d9c9147cdd353c06656e7ae4a796cf8`
-to exact reviewed and post-merge-tested `f232571d8c40211d9a5e8e177cee2b75970926e2`.
-The workflow verifies actual Git checkout commit and unchanged file blobs,
-explicitly updates the `core.py` Git blob check to
-`7a198a1d2f84e30e0fe84736cf0d1424ccedf221`, and runs the existing
-HTTP management unit tests **plus** the new offline
-`test_endpoint_hostname.py` regression before exercising the source-owned
-management server on a disposable loopback port.
+The current first-party GoreeCloud/VPN source is **Go**, not the retired Python management package. Mesh's immutable development contract now pins inspected VPN commit c6407faa2cd4626362a7afd1cbf7dced2959aebd and api/handler.go Git blob f1afbc60418bcdcab32a48e2b6358c595dd3175a. The isolated workflow builds the actual Go vpnd application, executes Go race tests and a Node-only Mesh read-only health projection against disposable numeric localhost. The exact health response is newline-terminated {"status":"ok"} and must never be interpreted as an active WireGuard data plane, approved peer, packet firewall or production service.
 
-This tests canonical endpoint syntax rejection and local management/health
-fixture compatibility. It does **not** resolve an endpoint hostname, establish
-a WireGuard tunnel, verify X25519 enrollment, install packet filters, open a
-network ingress listener, or deliver a production Mesh-to-VPN connector.
-Source checks and hosted CI are distinct acceptance gates; this record
-documents the proposed integration until exact-head and post-merge checks pass.
+Both Mesh-level and owner-supplied permission gates deny health reads before any network transport. Anonymous and invalid bearer management requests fail, a valid synthetic test token permits read-only info, and process outage/restart are checked. No SSH, live Mesh network, real user, NetBird service, VPN private key, DNS, tunnel interface, firewall or externally routed endpoint is touched. Production Identity/consent and authenticated service-to-service trust remain separate release gates.

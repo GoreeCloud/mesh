@@ -213,3 +213,6 @@ Before implementation details or release status can be asserted, resolve:
 ## License
 
 The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
+
+
+**First-party VPN ownership contract update:** The retired Python VPN health source is superseded by an immutable Go control-plane development fixture. Its isolated Mesh-only health check consumes GET /healthz from reviewed first-party GoreeCloud/VPN source, without treating liveness as WireGuard, DNS or access-policy status. See [the source-owned Gateway/VPN fixture specification](docs/gateway-vpn-health-fixtures.md) and the pinned Go smoke workflow. Third-party NetBird deployment and operator files remain owned separately.

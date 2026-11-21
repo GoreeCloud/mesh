@@ -2,12 +2,12 @@
 
 **Status:** Isolated transport-injected source contract fixtures; no deployment, networking, credentials, real remote transport, or production status claims. These fixtures extend the existing dependency-free Mesh owner-contract tests, without modifying active products.
 
-## Verified source-owned behavior — November 9, 2026
+## Current verified source-owned behavior — November 21, 2026
 
-- **Gateway console**: `GoreeCloud/gateway`, `cmd/console/main.go` Git blob `45b7104824efcbf0019f93334546070a6ca0c561`. `GET /healthz` emits JSON `{"ok":true}` with a trailing newline under Go `json.Encoder.Encode`, and `Content-Type: application/json; charset=utf-8`. This is console HTTP handler liveness only, not an authenticated read of Caddy admin state, TLS, proxy routes, ACME or certificate renewal. The actual console is loopback-only and requires separate secure setup; Mesh does not publish or query it.
-- **VPN management**: `GoreeCloud/VPN`, `src/goreecloud_vpn/server.py` Git blob `d43c64e12c750205adc567e1cb4ba8ab4923685c`. `GET /healthz` emits compact JSON `{"status":"ok","maturity":"alpha","component":"management"}` with the same JSON content type, after strict local Host/origin/request framing checks. This is process liveness only; it never asserts active WireGuard, routing, private DNS, data-plane authorization or nftables enforcement.
+- **Gateway console**: The existing pinned development Gateway console health fixture remains unchanged. GET /healthz is limited to console process liveness and does not assert Caddy ingress, TLS, ACME or reverse-proxy status.
+- **First-party GoreeCloud VPN Go control plane**: Pinned repository commit c6407faa2cd4626362a7afd1cbf7dced2959aebd and Git blob f1afbc60418bcdcab32a48e2b6358c595dd3175a from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
 
-A separately proposed VPN `GET /api/v1/readiness` route is **not** consumed by these untrusted source fixtures. Its authenticated development-branch behavior must not be conflated with the currently verified default-branch `/healthz` body or a stable, negotiated integration API.
+The authenticated Go GET /v1/info explicitly states tunnel_operational:false. It is tested separately in the owned disposable localhost process, never substituted for the unauthenticated Mesh health projection.
 
 ## Contract rules
 
@@ -23,13 +23,13 @@ These unauthenticated service liveness routes cannot substitute for source-side 
 
 Gateway's live Caddy ingress and production DNS/ACME state, VPN data plane, and external hosts are explicitly **out of scope**. This PR is development evidence only; re-review the owning source blobs on any upstream update before promotion.
 
-## Pinned real Python source acceptance (isolated, November 9, 2026)
+## Immutable first-party Go VPN source acceptance (isolated, November 21, 2026)
 
-The separate GitHub-hosted workflow `.github/workflows/vpn-real-python-contract.yml` now checks out GoreeCloud/VPN at immutable development commit `13973c531d9c9147cdd353c06656e7ae4a796cf8`, verifies actual Git blobs for the management server, store, plans, diagnostics and package metadata, and rejects dependency drift before importing source. No packages are installed. This is **one inspected management-alpha code revision**, not a floating latest VPN implementation.
+The dedicated .github/workflows/vpn-real-go-contract.yml workflow checks out first-party GoreeCloud/VPN source at the immutable c6407faa2cd4626362a7afd1cbf7dced2959aebd revision and verifies the exact API blob, module identity, absence of legacy Python source and absence of third-party NetBird deployment ownership. It uses official SHA-pinned checkout, Go and Node setup actions. Go race tests, vet and a local binary compilation are independent from Mesh synthetic fixture tests.
 
-`vpn-real-python.smoke.mjs` starts the *genuine* pinned Python management server only as a disposable `127.0.0.1` child with a strong random temporary token and private temporary SQLite store. It verifies Mesh-plus-owner permit denial *before transport*, exact response projection with the real source handler, unauthenticated and incorrect-token management rejection, browser-origin refusal, local owner-policy revocation, outage and restart/recovery. The test uses a narrow GET-only transport; it never registers a peer, changes an allow policy, creates a tunnel, binds a real DNS port, runs privileged nftables commands, or contacts an external host.
+vpn-real-go.smoke.mjs starts that genuine Go vpnd binary only as a disposable numeric-loopback process with temporary randomized administrator credentials and owner-private state. Mesh-plus-owner permit checks deny before transport, and the exact newline-terminated JSON reply is projected to the minimum synthetic status; anonymous or incorrect-token management reads are denied. Process outage and controlled restart are tested, including stale metadata ownership locking. The test creates no tunnel, privileged interface, firewall, DNS, external endpoint, real user or VPS service. It must not run on ordinary hosts: the script requires the exact hosted GitHub CI environment and checked source.
 
-The guarded script refuses normal execution without its exact GitHub CI environment flag and the source checkout path. A separately authorized Linux development-laptop run of this script returned its success marker after the four lifecycle checkpoints, including private store cleanup; exact-head hosted CI remains its own required gate. Passing source-contract acceptance **does not** establish a working VPN data plane, packet enforcement, source identity outside the disposable process, tenant-bound Identity access, GoreeShield purpose approval, Wardveil production security, durable storage, remote TLS, service availability, or permission to enable Mesh in production.
+A green workflow validates only this development-source contract. It does **not** establish encrypted transport, production identity, signed owner permission, device admission, GoreeShield/Wardveil policy or live Mesh connectivity.
 
 ## Pinned real Gateway Go console acceptance (November 10, 2026)
 
