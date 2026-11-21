@@ -129,7 +129,8 @@ def request(service, method, path, data=None, cfg=None, output=None, quiet=False
                     f.write(body)
                 print(f"HTTP {resp.status}; saved private output to {output}")
             else:
-                if not quiet:\n                    print(body.decode("utf-8", errors="replace") if body else f"HTTP {resp.status}")
+                if not quiet:
+                    print(body.decode("utf-8", errors="replace") if body else f"HTTP {resp.status}")
             return resp.status
     except urllib.error.HTTPError as e:
         fail(f"Service returned HTTP {e.code} (response body suppressed).")
