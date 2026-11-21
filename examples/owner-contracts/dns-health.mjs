@@ -1,22 +1,21 @@
-// Source-observed GoreeCloud DNS CLIENT health: a local A query succeeds.
-// Not evidence of DoH, DoT, DoQ, public DNS, DNSSEC or external availability.
-// Pinned to DNS WebServiceApi.cs Git blob 333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40
-// and APIDOCS.md Git blob fb1e769a04fc00e384189cee9f417532a4c75a22.
-// A trusted caller injects a transport; this module has no URLs, sockets,
-// credentials, fetch, raw server name output or live DNS connections.
+// Source-pinned Go DNS process-only HTTP health fixture.
+// GET /healthz responds with plain text "running\n" but does not make a
+// DNS query, probe an upstream or verify cryptographic DNSSEC readiness.
+// Injected transport only; Mesh and owner permits must independently grant.
 import { readHealthContext, healthSignalAborted } from './exact-health-fixture.mjs';
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
-const PATH = '/api/dnsClient/healthCheck';
-const MEDIA = 'application/json; charset=utf-8';
+const PATH = '/healthz';
+const MEDIA = 'text/plain; charset=utf-8';
 const unavailable = () => new Error('source health unavailable');
 
 export const DNS_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/DNS',
-  source_blob: '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40',
-  docs_blob: 'fb1e769a04fc00e384189cee9f417532a4c75a22',
+  source_blob: '8e7e7a915efb930a3cde40b3b10cc07e878818b6',
+  docs_blob: 'cd7d8793249adf374f74f3e65071e7511bf02b86',
   method: 'GET',
   path: PATH,
-  source_permission: 'DnsClient: View',
+  source_permission: 'none; Mesh and owner permits still required',
+  semantics: 'process-only',
   mode: 'transport-injected-nonproduction',
 });
 
@@ -38,21 +37,9 @@ function snapshot(value, allowed, required = allowed) {
   } catch { return null; }
 }
 
-// Narrowly accept only a two-field ASCII source response. Unlike JSON.parse,
-// this rejects duplicate keys and Unicode key aliases rather than overwriting
-// one spelling of a field. The server name is checked but NEVER projected.
-const NAME = String.raw`[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?`;
-const FIRST = new RegExp(String.raw`^\s*\{\s*"server"\s*:\s*"(${NAME})"\s*,\s*"status"\s*:\s*"ok"\s*\}\s*$`);
-const SECOND = new RegExp(String.raw`^\s*\{\s*"status"\s*:\s*"ok"\s*,\s*"server"\s*:\s*"(${NAME})"\s*\}\s*$`);
+// Reject any added content, extra newlines or credential-bearing response.
 function validBody(body) {
-  if (typeof body !== 'string' || body.length > 512 ||
-      Buffer.byteLength(body, 'utf8') > 512) return false;
-  const parsed = FIRST.exec(body) ?? SECOND.exec(body);
-  if (!parsed) return false;
-  const labels = parsed[1].split('.');
-  return labels.every(label =>
-    label.length > 0 && label.length <= 63 &&
-    !label.startsWith('-') && !label.endsWith('-'));
+  return typeof body === 'string' && body === 'running\n';
 }
 
 export function createDNSHealthFixtureAdapter(options) {

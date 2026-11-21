@@ -6,10 +6,10 @@ import { createDNSHealthFixtureAdapter, DNS_HEALTH_CONTRACT } from './dns-health
 import { createSyntheticMcpToolBridge } from '../synthetic/mcp-tool-bridge.mjs';
 import { createSyntheticStatelessMcpDispatcher, SYNTHETIC_MCP_VERSION } from '../synthetic/mcp-stateless-fixture.mjs';
 
-const PATH = '/api/dnsClient/healthCheck';
+const PATH = '/healthz';
 const observed = '2026-11-10T17:00:00.000Z';
-const body = '{"server":"dns-lab.internal","status":"ok"}';
-const response = b => ({ status: 200, contentType: 'application/json; charset=utf-8', body: b });
+const body = 'running\n';
+const response = b => ({ status: 200, contentType: 'text/plain; charset=utf-8', body: b });
 const request = { actor: 'fixture.reader', capabilityId: 'dns.health', operation: 'status.read' };
 const denied = { ok: false, error: { code: 'denied' } };
 
@@ -29,23 +29,24 @@ function harness(options, meshPermit = () => true) {
   });
 }
 
-test('source-pinned DNS client health is not encrypted DNS readiness', () => {
+test('source-pinned Go DNS process health is not resolver readiness', () => {
   assert.equal(DNS_HEALTH_CONTRACT.source, 'GoreeCloud/DNS');
   assert.equal(DNS_HEALTH_CONTRACT.source_blob,
-    '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40');
+    '8e7e7a915efb930a3cde40b3b10cc07e878818b6');
   assert.equal(DNS_HEALTH_CONTRACT.docs_blob,
-    'fb1e769a04fc00e384189cee9f417532a4c75a22');
+    'cd7d8793249adf374f74f3e65071e7511bf02b86');
   assert.equal(DNS_HEALTH_CONTRACT.path, PATH);
   assert.equal(DNS_HEALTH_CONTRACT.method, 'GET');
-  assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'DnsClient: View');
+  assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'none; Mesh and owner permits still required');
+  assert.equal(DNS_HEALTH_CONTRACT.semantics, 'process-only');
   assert.equal(DNS_HEALTH_CONTRACT.mode, 'transport-injected-nonproduction');
   const source = readFileSync(new URL('./dns-health.mjs', import.meta.url), 'utf8');
   assert.equal(source.includes('fetch('), false);
   assert.equal(source.includes('https://'), false);
 });
 
-test('two exact source-envelope orderings produce minimal synthetic status', async () => {
-  for (const variant of [body, '{"status":"ok","server":"dns-lab.internal"}']) {
+test('exact source process health yields minimal synthetic status', async () => {
+  for (const variant of [body]) {
     let transports = 0;
     const result = await harness({
       permit: () => true, clock: () => observed,
@@ -64,7 +65,7 @@ test('two exact source-envelope orderings produce minimal synthetic status', asy
       evidence_status: 'prototype',
       data: { state: 'ok', observed_at: observed },
     });
-    assert.equal(JSON.stringify(result).includes('dns-lab'), false);
+    assert.equal(JSON.stringify(result).includes('secret'), false);
     assert.equal('dns_protocols_accepted' in result.data, false);
     assert.equal('tls_verified' in result.data, false);
   }
@@ -88,19 +89,16 @@ test('both Mesh and owner permits must grant independently before transport', as
   assert.equal(transports, 0);
 });
 
-test('wrong status, duplicate JSON keys, escapes, server labels and added fields fail closed', async () => {
+test('process liveness rejects altered content, JSON, extra newline and oversized body', async () => {
   const invalid = [
-    '{"status":"error","server":"dns-lab.internal"}',
-    '{"server":"dns-lab.internal","status":"ok","status":"ok"}',
-    '{"server":"dns-lab.internal","status":"ok","private":"secret"}',
-    '{"server":"dns-lab.internal","status":"ok","server":"another"}',
-    '{"server":"dns..internal","status":"ok"}',
-    '{"server":"-dns.internal","status":"ok"}',
-    '{"server":"dns-.internal","status":"ok"}',
-    '{"server":"dns_underscore","status":"ok"}',
-    '{"server":"dns-lab.internal","st\\u0061tus":"ok"}',
-    '{"server":"dns-lab.internal","status":"ok","private":"my-token"}',
-    '{"server":"dns-lab.internal","status":"ok"}anything',
+    'running',
+    'RUNNING\n',
+    'running\n\n',
+    'running\r\n',
+    'ready\n',
+    'running\nprivate-secret',
+    '{"state":"running"}',
+    '{"server":"dns.lab","status":"ok"}',
     'x'.repeat(600),
     '',
   ];
@@ -124,7 +122,7 @@ test('untrusted owner response/accessors and noncanonical clock never leak', asy
     () => accessor,
     () => ({ ...response(body), extra: 'private' }),
     () => ({ ...response(body), status: 503 }),
-    () => ({ ...response(body), contentType: 'text/plain' }),
+    () => ({ ...response(body), contentType: 'application/json; charset=utf-8' }),
     () => null,
     () => [],
     () => { throw Error('private-token'); },

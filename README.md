@@ -14,6 +14,9 @@
 | Related platform-family repository | [`GoreeCloud/MIPS`](https://github.com/GoreeCloud/MIPS) |
 | Document location | `README.md` |
 
+
+**GoreeCloud DNS source reconciliation:** The development-only DNS owner-contract fixture now pins the current first-party Go DNS gateway and its exact GET /healthz process endpoint. It deliberately checks only process liveness with explicit independent Mesh/owner permits and never claims DNS query or production readiness. The retired Technitium-derived contract is incompatible with current GoreeCloud/DNS; see examples/owner-contracts/README.md and the exact-source workflow. Other Mesh production and source-contract gates remain independent and must not be bypassed.
+
 **Engineering checkpoint:** [Evidence-based stability and release gates](docs/stability-gates.md) define safe implementation sequencing, ownership boundaries, and evidence required before claiming an operational Mesh capability.
 
 **Nonproduction reference:** [Synthetic capability-discovery harness](examples/synthetic/README.md) exercises strictly local, read-only discovery, fail-closed authorization, bounded concurrency and opt-in redacted diagnostic evidence. It does not itself connect to any product.
