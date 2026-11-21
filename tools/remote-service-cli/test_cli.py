@@ -66,6 +66,13 @@ class CLIContractTests(unittest.TestCase):
                                 env=env, capture_output=True, text=True, timeout=5)
             self.assertNotEqual(cp.returncode, 0)
 
+    def test_private_api_output_is_opt_in(self):
+        cp = subprocess.run([sys.executable, str(SCRIPT), "api", "--help"],
+                            capture_output=True, text=True, timeout=5)
+        self.assertEqual(cp.returncode, 0)
+        self.assertIn("--show-data", cp.stdout)
+        self.assertIn("--output", cp.stdout)
+
     def test_no_automatic_redirects(self):
         obj = mod.NoRedirect()
         with self.assertRaises(Exception):
