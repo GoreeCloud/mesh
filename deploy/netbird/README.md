@@ -1,0 +1,158 @@
+# Fresh NetBird VPN on VPS Mesh
+
+**Implementation:** entirely new self-hosted NetBird Docker installation with an existing Caddy reverse proxy, a new embedded identity provider, fresh keys, a fresh empty management database, and a separate VPS peer to be enrolled after initial administrator login. No prior NetBird identities, groups, policies, peers, setup keys or databases are imported.
+
+**Source owner:** GoreeCloud/mesh. **Runtime owner:** authorized VPS Mesh operator. This directory contains only reproducible non-secret source and documentation; do not commit real deployment configs, databases, certificates, recovery data or passwords.
+
+## Fresh-install authentication compatibility
+
+**Fixed November 20, 2026:** NetBird's combined server requires `server.auth.owner.password` to be a **bcrypt hash**. Supplying a plaintext password causes an OAuth login HTTP 500 with the upstream error "hashedSecret too short to be a bcrypted password", even while the public dashboard and OIDC metadata return HTTP 200. The source bootstrap now hashes a freshly generated owner password using pinned `bcrypt==4.2.0`, stores only the bcrypt hash in `config.yaml`, and writes the human-entered plaintext password **solely** to an owner-only `credentials/initial-admin-password` file. A test exercises the generated hash, compares it to the private password, and ensures neither application config nor logs expose plaintext. The deployed fresh server's bcrypt hash was corrected with NetBird's own `admin user change-password --password-file -` command; fresh management store remains empty (0 accounts/peers) until first login. OIDC and instance API health returned HTTP 200 after a server restart. Interactive login success is not yet established without a user sign-in.
+
+To reproduce a fresh bootstrap in a private Python virtual environment, install the pinned dependency first:
+
+```sh
+python3 -m venv .venv-netbird-bootstrap
+. .venv-netbird-bootstrap/bin/activate
+python3 -m pip install -r /path/to/repo/deploy/netbird/requirements-bootstrap.txt
+```
+
+Do not embed a plaintext password in config, invoke a password-changing CLI with `--password` on argv, or upload a password-bearing file to GitHub. The existing private password-file repair method is for an operator explicitly recovering an incorrectly seeded **fresh** local IdP; do not recreate or restore historic databases.
+
+## Live state — 2026-11-20 (America/Chicago)
+
+| Area | Actual observation |
+| --- | --- |
+| NetBird combined server / dashboard | Running in Docker from immutable image digests, using an independently generated fresh config/data directory |
+| Previous restored runtime | Containers stopped and removed; restored **deployment directory deleted** after validating mounts of the fresh deployment |
+| Management store | New SQLite store passed integrity check; **0 management accounts, 0 management users, 0 peers, 0 groups, 0 policies, 0 setup keys** at pre-login checkpoint |
+| Embedded local identity | A newly generated private bootstrap owner password was initially seeded as plaintext (triggering HTTP 500 login); corrected to validated bcrypt via NetBird's supported CLI and fixed in bootstrap source. **The owner subsequently completed first login; the newly initialized account is operational.** |
+| NetBird dashboard, public TLS / OAuth2 discovery | HTTP 200 at `https://netbird.goreecloud.com`; existing Caddy TLS and upstream routes reused |
+| STUN UDP/3478 | Verified responding during earlier control-plane tests; **revalidated by live P2P peer connection from the laptop** |
+| Existing application sites | Vikunja, Plane, Stirling PDF HTTP 200 after NetBird cutover |
+| AdGuard via existing Caddy | Caddy internal TLS + `remote_ip 100.64.0.0/10` matcher; forced public-IP request was denied with HTTP 404, verified against Caddy local public root |
+| VPS NetBird peer / laptop peer | **Both enrolled and P2P tested** on the new network. Both devices reported 1/1 connected; laptop reached AdGuard's login page via the VPN overlay address with verified private TLS |
+| NetBird private DNS | **Verified live**: an admin-device-only private zone and A record were created through authenticated NetBird API; the laptop resolves the private hostname over `wt0` and reaches AdGuard HTTPS without an IP override |
+| Historical migration archive | Separate old historical files exist under a migration archive **outside the running deployment**. They were not imported or mounted. Destructive removal of that pre-existing archival material is a separate retention decision |
+
+**Transport and private DNS confirmed:** laptop NetBird P2P to VPS AdGuard login page, normal DNS resolution, HTTP 200 with private TLS verified via the public CA certificate file. Actual AdGuard account login and Firefox certificate trust are not yet verified.
+
+## Reproduce a clean install
+
+Run on an authorized host, in a directory that does **not** exist. Identify the *current* private Docker IP of your existing Caddy container; reject stale addresses. The script fails closed rather than reusing an existing folder.
+
+```sh
+python3 bootstrap-fresh.py \
+  --directory "$HOME/goreecloud-netbird-fresh" \
+  --domain netbird.goreecloud.com \
+  --owner-email '<ADMIN_EMAIL>' \
+  --trusted-proxy-ip '<VERIFIED_CADDY_DOCKER_IP>'
+cd "$HOME/goreecloud-netbird-fresh"
+
+# Copy reviewed source-owned Compose templates; no restored database is needed.
+cp /path/to/repo/deploy/netbird/docker-compose.yml .
+docker compose config --quiet
+docker compose up -d --no-build
+```
+
+The helper generates **new** 256-bit database encryption material, relay authentication material, and a strong owner password with Python's cryptographic random generator, then bcrypt-hashes that password before writing it to the server configuration. It creates an empty `data/` directory. Secret files are mode `0600`, directories `0700`. It prints no passwords/tokens. This script is **not** needed to replay the already-running deployment. Docker Compose is pinned by immutable digest. Restart with the existing preserved *new* store; do not regenerate keys after adoption or accidentally start a second concurrent SQLite server.
+
+### First login without restored credentials
+
+The bootstrap email is specified by the owner (the active installation uses the verified administrative email). The freshly generated password lives **only in the private VPS runtime**:
+
+```sh
+# Run on your authorized laptop using your correct SSH private key:
+ssh -i ~/.ssh/<VERIFIED_LAPTOP_SSH_KEY> -o IdentitiesOnly=yes \
+  '<VPS_USER>@<VPS_HOST>' \
+  'cat "$HOME/goreecloud-netbird-fresh/credentials/initial-admin-password"'
+```
+
+Enter the generated password into [the new NetBird dashboard](https://netbird.goreecloud.com). This is intentionally not a public setup wizard with an unauthenticated owner-claim window. The first sign-in must be verified before making claims about new management accounts. On first successful sign-in, configure MFA if supported, rotate the initial password, verify the current owner and its permissions, and verify login and password rotation before retiring the private bootstrap password file or removing the temporary owner bootstrap stanza; the configuration now contains a bcrypt hash, **not plaintext**. Do not revoke/remove initial access prematurely. The file under `credentials/` also requires secure retirement/rotation. Never put passwords, PATs, setup keys or private IDs in a GitHub PR, ChatGPT or unredacted log.
+
+### Enroll an entirely NEW VPS peer
+
+The `docker-compose.peer.yml` template uses a new, empty `client-state/` and mounts a private, hidden-input one-off setup key file. It never imports old peer WireGuard identities. Do not run it until the new owner has signed in and created an authorized one-off setup key in the new dashboard:
+
+```sh
+cd "$HOME/goreecloud-netbird-fresh"
+./enroll-vps-peer.sh
+docker exec goreecloud-netbird-client netbird status
+ip -br addr
+```
+
+The helper requires a private interactive TTY. **Post-enrollment hardening completed:** recreated only the peer container using persisted state, with no setup-key mount or bootstrap environment variable. The one-time key file was deleted locally. The key still needs server-side revocation through the NetBird dashboard. A private 0600 Compose rollback snapshot is retained. The source now has `docker-compose.peer.enrolled.yml` for durable restarts. Do not embed a key in Compose, environment logs, or argv. The host-network peer requires restricted Docker/admin privileges and changes the network namespace; review firewall, inbound rules, and NetBird policy before starting.
+
+### Connect laptops and configure the private AdGuard hostname
+
+An existing laptop NetBird client must be **enrolled in the new network**. Old setup keys and sessions are not valid for this new installation. On the laptop, create/select a separate new profile when appropriate, sign into this control plane, and verify its new address/peers. The user must complete first owner sign-in; do not authenticate an unspecified account automatically.
+
+Then create appropriate admin-device and server peer groups, and a *narrow* NetBird policy allowing only authorized administrators to connect to the **newly enrolled VPS peer** on TCP 443. Do not retain an open default all-to-all policy merely for ease of testing.
+
+Once the VPS peer's real overlay address is known, add the custom NetBird DNS zone `adguard.goreecloud.com` and an apex A record pointing to that verified address; assign DNS only to the approved admin-device groups. Do not publish an A record in public Porkbun DNS to the VPS public IP. This avoids exposing the AdGuard admin UI. Validate client DNS responses, NetBird peers, TCP/443, and actual AdGuard HTTPS login.
+
+Caddy currently uses `tls internal` for AdGuard. The **public CA certificate only** can be copied from Caddy to an authorized client for a scoped `curl --cacert` test. No CA root should be trusted globally without an explicit browser/OS security decision.
+
+## Verified status and recovery
+
+```sh
+cd "$HOME/goreecloud-netbird-fresh"
+docker compose ps
+docker compose config --quiet
+docker exec goreecloud-temp-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+curl -fsS https://netbird.goreecloud.com/oauth2/.well-known/openid-configuration -o /dev/null
+curl -fsS https://netbird.goreecloud.com/api/instance -o /dev/null
+docker ps --format '{{.Names}}'
+```
+
+The deployed Caddy routes are **still** the NetBird public management domain and the separately protected VPN-only AdGuard domain. There are independently retained Caddy rollback snapshots under the new working directory `caddy-recovery/`, but restoring these blindly could remove intervening changes. A usable application backup requires fresh server data/secret preservation and an independent restore rehearsal; neither should import the retired historical NetBird dataset.
+
+## Verified private AdGuard transport and outstanding policy/DNS work
+
+The authorized laptop and VPS were both enrolled into the **new** NetBird account. The laptop reports a direct P2P connection, both peers show `1/1 Connected`, and two-way ICMP succeeds. A laptop HTTPS request to `adguard.goreecloud.com` routed explicitly to the VPS's newly assigned overlay IP using `curl --resolve` and the Caddy private CA root returned **HTTP 200, TLS verification result 0**. The identical hostname forced through the VPS public address returned **HTTP 404**, preserving the Caddy access restriction. This is proof of transport and the login-page response, not proof of an AdGuard account login.
+
+**Private DNS was subsequently configured and independently verified from the laptop.** The `gc-netbird` management CLI now has an owner-privately enrolled and verified NetBird PAT; authenticated API reads and scoped additive writes have been validated. Three private, owner-only proposal JSON files on VPS Mesh have passed offline dry-runs: a new admin-device group with the authorized laptop peer, a custom zone `adguard.goreecloud.com` restricted to that group, and its apex A record pointing at the freshly verified VPS overlay IP. Their current identifiers are private runtime details; an administrator-device group, scoped private DNS zone, A record and additive TCP/443 policy were created successfully, with authenticated API readback. No existing group/policy was deleted or replaced. The approved process created the administrator-device group, used its verified ID in a new private DNS zone, then created the A record for the newly verified VPS overlay IP. The laptop resolved `adguard.goreecloud.com` using NetBird's managed DNS resolver; the public DNS provider was not modified. Verify hostname resolution and browser certificate trust on the laptop before declaring full user acceptance. Do not add a public Porkbun A record for AdGuard.
+
+The fresh `Default` All-to-All policy has now been **disabled by explicit operator authorization**. Only the unidirectional administrator-to-VPS TCP/443 policy remains enabled. Post-change tests confirmed private AdGuard HTTPS still works, while ICMP no longer succeeds between peers. Restrict the final access policy to approved administrator peers; the Caddy `100.64.0.0/10` source matcher alone is not an admin-only authorization policy.
+
+The peer's persistent identity survived recreation without the setup key environment or mount. The local one-time setup key file was deleted after validation, and `docker-compose.peer.enrolled.yml` in the repository is the correct subsequent-runtime template. The owner still must revoke the one-off setup key in the NetBird dashboard. Preserve the client-state directory during future upgrades.
+
+**Reliability note:** Intermittent NetBird Signal/Management gRPC stream disconnects were observed behind Caddy 2.11 even while P2P was healthy. Investigate before certifying long-term uptime. A documented Caddy-specific workaround disables a global body idle timeout; it was **not deployed** because disabling slowloris-related protection across all unrelated GoreeCloud sites would require a separately assessed change.
+
+
+### Verified authenticated REST and private DNS acceptance
+
+With an owner-generated NetBird PAT stored exclusively in the authorized VPS user's private CLI credential store, `gc-netbird auth-check` passed. The CLI then created a narrowly scoped admin-device group containing only the authorized laptop peer, a custom private DNS zone `adguard.goreecloud.com` distributed **only** to that group, and a matching A record for the verified new VPS NetBird address. All were read back through the authenticated NetBird API, with no setup keys or secrets displayed.
+
+An additional **enabled**, **unidirectional**, TCP/443-only allow policy from the new admin-device group to the existing VPS server group was created and read back. The former default `All → All` allow policy was subsequently **disabled by PUT**, preserving the policy for rollback. Only the approved administrator-device → VPS TCP/443 rule remains enabled. Tested successful HTTPS and restricted ICMP after the cutover.
+
+After the DNS change, the authorized laptop's `resolvectl query` returned the VPS overlay address on `wt0`, and `getent ahostsv4` agreed. An ordinary `curl` to `https://adguard.goreecloud.com/login.html` **without `--resolve`** returned HTTP 200, TLS result 0 using the locally held public Caddy CA certificate, with a remote connection to the private VPN IP. The public destination's forced-host probe returned HTTP 404. Both VPN peers remained `1/1 Connected` over direct P2P, and existing Vikunja, Plane, NetBird and Stirling public health checks were unaffected.
+
+**Remaining independent acceptance gates:** revoke the one-time NetBird setup key server-side; decide how Firefox should validate Caddy's internal certificate authority (no global browser trust was granted); complete an actual AdGuard account login; and monitor intermittent Caddy NetBird gRPC streaming disconnects. The broad Default policy was disabled and connectivity/negative-control tests passed, with a dry-run-validated private rollback file retained. The tests do not imply that unrelated public services are restricted by the VPN policy.
+
+
+## Enforced access-policy cutover — verified November 20, 2026
+
+**User-authorized network change:** NetBird's `Default` policy (All → All; bidirectional; every protocol) was **disabled** via the authenticated `gc-netbird update policies` PUT endpoint. The policy was **not deleted**. The previously created unidirectional `GoreeCloud AdGuard HTTPS - administrator devices to VPS` TCP/443 policy remains enabled, and it is now the **only enabled NetBird access policy**. This does not restrict separately public Caddy domains, NetBird control-plane traffic, or any service outside this VPN peer policy boundary.
+
+**Preparation:** before changing anything, the original Default policy was fetched via authenticated REST into an owner-private JSON snapshot (mode 0600). Exact disabled and re-enable JSON payloads were constructed from the live policy and dry-run validated with `gc-netbird`; narrow-policy source group, target group, protocol, port 443 and unidirectionality were verified against the live API. Rollback was **prepared and dry-run tested, not executed**.
+
+**Live API evidence:** the Default update returned HTTP 200; authenticated GET and LIST both showed `Default.enabled=false` and the scoped policy `enabled=true`. On the laptop, NetBird remained connected (1/1 P2P) and ordinary private-DNS HTTPS to AdGuard returned HTTP 200, TLS verification 0, and the intended private VPN destination. ICMP to the VPS, which succeeded before the change, returned 0/2 replies afterward. VPS → laptop ICMP also returned 0/2. Laptop TCP/22 was unreachable (which also depends on whether an SSH listener exists). NetBird public HTTPS, Vikunja and Plane returned HTTP 200 after the cutover. The control plane and existing Caddy configuration were not changed.
+
+**Emergency rollback, only if explicitly authorized and necessary:** on VPS Mesh, the retained `~/.local/share/goreecloud/netbird-cli/rollback/20261120-default-policy-disable-reenable.json` is an owner-only mode-0600 PUT payload. Use a private terminal / Remote Desktop Commander, verify the original account/policy ID and API health, and run:
+
+```sh
+f="$HOME/.local/share/goreecloud/netbird-cli/rollback/20261120-default-policy-disable-reenable.json"
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$f" --dry-run
+# Emergency restore only if explicitly approved, because this re-enables ALL-TO-ALL:
+gc-netbird update policies VERIFIED_DEFAULT_POLICY_ID --data-file "$f" --confirm-write --confirm-network-impact
+```
+
+The raw GET snapshot and disable payload are stored privately in the same directory; do not commit any private config, PAT, group memberships or unredacted network inventories. Do not substitute this policy change for service-side authentication, host firewall protections, or explicit Firefox certificate validation.
+
+## Security and authority
+
+NetBird is a third-party system; GoreeCloud VPN is a separate first-party future app. Caddy exposure, setup keys, and the embedded IdP fall under GoreeCloud Identity, GoreeShield privacy and Wardveil network controls. Use real facts to promote states: **configured** does not mean **enrolled**, **an HTTP 200** does not mean **authorized peer communication**, and **a private DNS plan** does not mean **DNS works**.
+
+Official resources: [Quickstart](https://docs.netbird.io/selfhosted/selfhosted-quickstart), [Deployment configuration](https://docs.netbird.io/selfhosted/maintenance/configuration-files), [Custom DNS zones](https://docs.netbird.io/manage/dns/custom-zones), [Docker client](https://docs.netbird.io/get-started/install/docker), [External reverse proxy](https://docs.netbird.io/selfhosted/external-reverse-proxy), [Backups](https://docs.netbird.io/selfhosted/maintenance/backup).
+
+Document exact verified CLI command forms in the canonical `GoreeCloud/CLI Commands/Third-Party/` and host environment specifics in `GoreeCloud/CLI Commands/Hosts/` when raw Markdown editing is available. The GitHub copy is the deployed **source and engineering reference**, not a substitute for canonical Google Drive operating records.
