@@ -1,11 +1,11 @@
 // Source-observed GoreeCloud VPN management LIVENESS, not tunnel readiness.
-// Pinned to Git blob d502a8e7e859c78a038ad92874eed7e224bf83b6.
+// Pinned to Git blob d5c146a3bcb59d6f12a224643e2a30f3cc38c972.
 // No socket, URL, secret, credential, fetch call or actual VPN connection.
 import { createExactHealthFixtureAdapter } from './exact-health-fixture.mjs';
 
 export const VPN_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/VPN',
-  source_blob: 'd502a8e7e859c78a038ad92874eed7e224bf83b6',
+  source_blob: 'd5c146a3bcb59d6f12a224643e2a30f3cc38c972',
   method: 'GET',
   path: '/healthz',
   mode: 'transport-injected-nonproduction',

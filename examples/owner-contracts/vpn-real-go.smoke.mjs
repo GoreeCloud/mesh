@@ -3,7 +3,7 @@
 // state. No WireGuard interface, gateway, production service, DNS or host route is changed.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, generateKeyPairSync } from 'node:crypto';
 import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { createServer } from 'node:net';
@@ -45,11 +45,16 @@ async function stopVPN(child) {
     await Promise.race([new Promise(ok => child.once('exit', ok)), sleep(850)]);
   }
 }
-function loopback(port, path = '/healthz', token = '', method = 'GET') {
+function loopback(port, path = '/healthz', token = '', method = 'GET', payload = null) {
   assert.ok(['/healthz', '/v1/peers', '/v1/info'].includes(path));
   return new Promise((yes, no) => {
     const headers = {};
     if (token) headers.Authorization = 'Bearer ' + token;
+    const body = payload === null ? undefined : JSON.stringify(payload);
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(body,'utf8');
+    }
     const req = httpRequest({
       host: '127.0.0.1', family: 4, port, path, method,
       agent: false, headers,
@@ -69,7 +74,7 @@ function loopback(port, path = '/healthz', token = '', method = 'GET') {
     });
     req.setTimeout(800, () => req.destroy(new Error('private source deadline')));
     req.once('error', () => no(new Error('private source unavailable')));
-    req.end();
+    req.end(body);
   });
 }
 async function main() {
@@ -149,7 +154,22 @@ async function main() {
     assert.equal(viewerInfo.status,200);
     assert.equal(JSON.parse(viewerInfo.body).access_role,'viewer');
     assert.equal(JSON.parse(viewerInfo.body).tunnel_operational,false);
-    assert.equal((await loopback(port, '/v1/peers', viewer)).status,200);
+    const { publicKey } = generateKeyPairSync('x25519');
+    const rawPublic = publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
+    assert.equal(rawPublic.length,44);
+    const enrollment = await loopback(port,'/v1/peers',token,'POST',{
+      name:'mesh-synthetic-device',public_key:rawPublic
+    });
+    assert.equal(enrollment.status,201);
+    const adminInventory = JSON.parse((await loopback(port,'/v1/peers',token)).body);
+    assert.equal(adminInventory.peers.length,1);
+    assert.equal(adminInventory.peers[0].public_key,rawPublic);
+    const viewerInventory = JSON.parse((await loopback(port,'/v1/peers',viewer)).body);
+    assert.equal(viewerInventory.peers.length,1);
+    assert.deepEqual(Object.keys(viewerInventory.peers[0]).sort(),['address','name','status']);
+    assert.equal(viewerInventory.peers[0].name,'mesh-synthetic-device');
+    assert.equal(viewerInventory.peers[0].status,'pending');
+
     assert.equal((await loopback(port, '/v1/peers', viewer, 'POST')).status,403);
     assert.equal((await loopback(port, '/v1/peers', viewer, 'DELETE')).status,403);
     assert.equal((await loopback(port, '/v1/peers', token)).status,200);
@@ -171,6 +191,9 @@ async function main() {
     assert.equal(restored,true,'Go management process did not restart with private state');
     assert.equal((await loopback(port,'/v1/peers')).status,401);
     assert.equal(JSON.parse((await loopback(port,'/v1/info',viewer)).body).access_role,'viewer');
+    const afterRestart=JSON.parse((await loopback(port,'/v1/peers',viewer)).body);
+    assert.deepEqual(Object.keys(afterRestart.peers[0]).sort(),['address','name','status']);
+    assert.equal(afterRestart.peers[0].status,'pending');
     assert.equal((await loopback(port,'/v1/peers',viewer,'POST')).status,403);
     process.stdout.write('PASS: pinned first-party Go VPN / Mesh local read-only health contract\n');
   } finally {

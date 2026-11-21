@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: GoreeCloud/VPN
-          ref: 09eb75dca0dadabcf0df1898c64e3877e5802dee
+          ref: 3ddd651df50909337d446af1d2dbd2e950e187e5
           path: vpn-source
           persist-credentials: false
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -30,8 +30,8 @@ jobs:
       - name: Verify exact first-party source and immutable Go API contract
         run: |
           set -euo pipefail
-          test "$(git -C vpn-source rev-parse HEAD)" = "09eb75dca0dadabcf0df1898c64e3877e5802dee"
-          test "$(git -C vpn-source hash-object internal/api/handler.go)" = "d502a8e7e859c78a038ad92874eed7e224bf83b6"
+          test "$(git -C vpn-source rev-parse HEAD)" = "3ddd651df50909337d446af1d2dbd2e950e187e5"
+          test "$(git -C vpn-source hash-object internal/api/handler.go)" = "d5c146a3bcb59d6f12a224643e2a30f3cc38c972"
           grep -Fq 'module github.com/GoreeCloud/VPN' vpn-source/go.mod
           grep -Fq '"tunnel_operational"' vpn-source/internal/api/handler.go
           grep -Fq '"access_role"' vpn-source/internal/api/handler.go
