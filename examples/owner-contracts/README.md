@@ -233,3 +233,8 @@ Revalidate pinned source hashes and authorization/response assumptions if Calend
 ## November 12, 2026 — reject accessor-backed health cancellation contexts
 
 The common transport-injected health adapter and source-pinned DNS health adapter now validate optional caller-supplied cancellation context via exact own **data** descriptors before use, rejecting accessor-backed, inherited, unexpected-field, forged or nonnative AbortSignal values. Real abort state is read through `AbortSignal.prototype`'s intrinsic getter, not a caller-defined `aborted` accessor. Bad contexts fail closed before permit or owner transport; aborted native signals still refuse calls. Four focused synthetic tests cover accepted and aborted native signals, hostile context accessors, shadowed abort accessors and invalid context shapes; the full Node suite remains green. This protects development-only fixed-capability health fixtures, **not** live Identity authorization, durable quotas, physical OS isolation, TLS/DoQ production acceptance, or network deployment.
+
+
+## Gateway current Go management liveness (November 21, 2026)
+
+Gateway uses immutable source commit 35f005ecd0c77843b912fd07b98d7885c756a1f4 and internal/gateway/http.go blob c04fc3264959b447feaddc2775e9eecde26b3b46. The current owner route is GET /api/health returning JSON {"ok":true} followed by LF, and the bearer-protected detailed route is GET /api/status. The synthetic gateway-healthz.mjs adapter projects only state and caller observation time with independent Mesh and owner permits. The isolated source smoke builds the actual root Go+Caddy binary with a React web bundle and tests a temporary local process. Neither a live Caddy listener nor certificates or production routing are evidenced.

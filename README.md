@@ -222,3 +222,6 @@ The GoreeCloud-controlled source and documentation in this repository are provid
 
 
 **First-party DNS source correction:** The pinned synthetic DNS status adapter now reads the actual Go DNS /healthz text-only process contract rather than a retired Technitium-derived C# DNS-client API. Tests require a precise body and prohibit exposing the bearer-protected DNS status counters. This restores the independent source boundary in development CI, not production DNS observability.
+
+
+**First-party Gateway source correction:** The current Gateway Go/Caddy source replaces the retired cmd/console contract; the pinned Mesh test builds the actual root Go module and React assets, checks GET /api/health, bearer-gated GET /api/status, hostile Host handling and process restart in a disposable loopback environment. It does not apply any ingress route, TLS certificate, DNS record or VPS configuration.

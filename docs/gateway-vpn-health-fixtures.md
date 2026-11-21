@@ -4,14 +4,14 @@
 
 ## Current verified source-owned behavior — November 21, 2026
 
-- **Gateway console**: The existing pinned development Gateway console health fixture remains unchanged. GET /healthz is limited to console process liveness and does not assert Caddy ingress, TLS, ACME or reverse-proxy status.
+- **Gateway console**: The pinned current Go Gateway console health fixture now uses GET /api/health as exact console process liveness and does not assert Caddy ingress, TLS, ACME or reverse-proxy status.
 - **First-party GoreeCloud VPN Go control plane**: Pinned repository commit 3ddd651df50909337d446af1d2dbd2e950e187e5 and Git blob d5c146a3bcb59d6f12a224643e2a30f3cc38c972 from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
 
 The authenticated Go GET /v1/info explicitly states tunnel_operational:false. It is tested separately in the owned disposable localhost process, never substituted for the unauthenticated Mesh health projection.
 
 ## Contract rules
 
-`gateway-healthz.mjs` and `vpn-healthz.mjs` provide separate read-only adapters atop the existing `exact-health-fixture.mjs`. No `fetch`, socket, URL selector, bearer handling, credentials or network transport is included. The caller explicitly injects a synthetic `transport({method:'GET', path:'/healthz', signal})`; Mesh's permission callback and the adapter's own callback must both authorize. Default owner authorization is deny. A successful exact-source reply is projected into only `{state:'ok', observed_at:caller_clock}`.
+`gateway-healthz.mjs` and `vpn-healthz.mjs` provide separate read-only adapters atop the existing `exact-health-fixture.mjs`. No `fetch`, socket, URL selector, bearer handling, credentials or network transport is included. The caller explicitly injects the respective fixed synthetic GET route (/api/health for Gateway and /healthz for VPN); Mesh's permission callback and the adapter's own callback must both authorize. Default owner authorization is deny. A successful exact-source reply is projected into only `{state:'ok', observed_at:caller_clock}`.
 
 Tests assert exact source pins, route and JSON response shapes, no accidental claims about active tunnels or Gateway routing, dual permit denial, wrong HTTP status/content type, extra/duplicate fields, oversized/malformed replies, hostile accessors, abort and invalid clock. Unknown/altered source contracts fail closed rather than silently widening the accepted schema.
 
@@ -31,15 +31,13 @@ vpn-real-go.smoke.mjs starts that genuine Go vpnd binary only as a disposable nu
 
 A green workflow validates only this development-source contract. It does **not** establish encrypted transport, production identity, signed owner permission, device admission, GoreeShield/Wardveil policy or live Mesh connectivity.
 
-## Pinned real Gateway Go console acceptance (November 10, 2026)
+## Current first-party Gateway Go console acceptance (November 21, 2026)
 
-The separate GitHub-hosted `.github/workflows/gateway-real-go-contract.yml` checks out the reviewed GoreeCloud Gateway **development source commit** `5f976a38c688c0d366d8d82adf5464a36720729f`, verifies the exact Go console/OIDC sources and `go.mod`/`go.sum` blob identities, builds `cmd/console`, then runs `gateway-real-go.smoke.mjs` against one disposable numeric-loopback **console process** with a generated ephemeral bearer token. All source checkout and build steps are confined to the GitHub CI runner; no deployment credentials are used.
+The isolated workflow pins the actual GoreeCloud/gateway Go/Caddy owner source commit 35f005ecd0c77843b912fd07b98d7885c756a1f4, main.go blob b21a37a37843825d700ea4abe0c484174993218f, internal/gateway/http.go blob c04fc3264959b447feaddc2775e9eecde26b3b46 and matching go.mod/go.sum blobs. The retired standalone cmd/console code is absent. Its current Go binary has a first-party root-module serve mode, embeds the built React console, requires a private GATEWAY_ADMIN_TOKEN environment variable and binds only loopback management IPs. The unauthenticated health route is GET /api/health with JSON {"ok":true} followed by LF; the authenticated read-only management route is GET /api/status.
 
-The smoke exercises the exact `/healthz` Go response through the existing transport-injected Mesh fixture; default deny, source-owner deny-before-I/O, anonymous and incorrect-token overview rejection, read-only method rejection, forged cross-site rejection, correct-token console API acceptance, clean process outage and restart. It creates no public listener, DNS record, TLS certificate, WireGuard interface, trusted Caddy admin endpoint or production route.
+CI checks out immutable owner source without persistent credentials, compiles the actual current web assets, verifies locked Go module downloads, runs selected real Go control-plane security tests and builds the genuine Caddy-based Gateway binary. The source-only smoke launches it on a disposable numeric-loopback port with its own private saved-state path, rejects unauthenticated and incorrect-token management reads, denied methods and forged Host headers, accepts a correct-token status request without exposing config, and tests explicit process outage/restart. There are no production credentials, public listeners, DNS modifications, WireGuard changes or deployment actions.
 
-The endpoint `/healthz` proves only that the **console process** can answer. Even a correct-token `/api/v1/overview` response proves neither actual Gateway ingress health nor public TLS, DNS, route parity, certificate renewal, backup recovery or tenant-scoped Identity permission. Until exact-head CI and reviewed source ownership succeed, this addition is **proposed development acceptance**, not a shipped connector. Passing does not authorize production deployment.
-
-The reviewed Gateway source commit also contains an authenticated `/api/v1/readiness` endpoint. This source-owned Mesh integration intentionally probes **only** `/healthz`: neither its contract nor the loopback test treats console liveness as administrative readiness or ingress route/TLS health.
+A correct GET /api/health response proves only console process availability. The authenticated /api/status response is **not** proof of externally reachable Caddy ingress, public TLS, ACME certificate renewal, active routes, backup restore, DNS state or approved GoreeCloud Identity permissions. The negative tests do NOT invent unsupported browser Fetch-Metadata enforcement. This remains development-only Mesh authorization-shape verification until separately accepted and deployed.
 
 ### Native inventory least-privilege source check
 

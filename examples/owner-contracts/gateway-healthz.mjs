@@ -1,13 +1,13 @@
 // Source-observed GoreeCloud Gateway CONSOLE health only (not Caddy ingress health).
-// Pinned to Git blob 45b7104824efcbf0019f93334546070a6ca0c561.
+// Pinned to Git blob c04fc3264959b447feaddc2775e9eecde26b3b46.
 // No socket, URL, secret, credential, fetch call or actual Gateway connection.
 import { createExactHealthFixtureAdapter } from './exact-health-fixture.mjs';
 
 export const GATEWAY_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/gateway',
-  source_blob: '45b7104824efcbf0019f93334546070a6ca0c561',
+  source_blob: 'c04fc3264959b447feaddc2775e9eecde26b3b46',
   method: 'GET',
-  path: '/healthz',
+  path: '/api/health',
   mode: 'transport-injected-nonproduction',
 });
 
