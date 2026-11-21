@@ -19,11 +19,11 @@ This is an evidence-based snapshot, not a claim that a native GoreeCloud PDF pro
 | Stirling API authentication | **Verified** HTTP 200 from an authorized VPS user's existing authenticated CLI |
 | VPS-local CLI | **Installed and syntax-tested**; offers status, login, auth-check, compress, merge, fixed-host API request and logout |
 | Local token storage | **Verified** owner-only mode 0600 file in a mode 0700 directory; token contents were not read or transmitted |
-| End-to-end PDF operation | **Not yet validated** with a real sample PDF and output-content inspection |
+| End-to-end CLI PDF operation | **Verified with disposable synthetic documents**: authenticated compress/merge, PDF page counts 1/2, extracted text, preserved inputs, no overwrite and mode 0600 output; no general file-safety certification |
 | ChatGPT automation | **Conditional capability**, not a deployed chat tool: authorized Remote Desktop Commander access could execute the CLI while a live device connection and accessible files are available |
-| GoreeCloud Mesh provider adapter | **Proposed only**; no actual connector, application-facing service, discovery endpoint or job worker deployed |
+| GoreeCloud Mesh provider adapter | **Nonproduction source contract tested in [PR #115](https://github.com/GoreeCloud/mesh/pull/115)**: deny-first operations, fixed-origin transport, bounded bytes and concurrency, 10 isolated Node tests; NOT deployed, no approved service credential or application API |
 | GoreeCloud applications using this provider | **No verified application integration** |
-| Independent off-host backup / restore | **Pending** |
+| Encrypted backup and recovery | **Partial**: encrypted archive checksum and isolated restore of Stirling Compose/Caddy config matched live files; full application/database restore and off-host replication remain unverified. Daily user backup timer stays disabled while service user manager lacks Docker group |
 
 **Important distinction:** a working personal API token on a VPS does not grant all GoreeCloud products access to that token, and does not imply that ChatGPT can process arbitrary chat attachments automatically.
 
@@ -124,9 +124,9 @@ These requirements are not proof the temporary provider enforces them. They are 
 
 ## 7. Implementation stages and acceptance
 
-**Stage A — verified current checkpoint:** HTTPS Stirling 3.4.0 UP, CLI installed, local private token enrolled, auth-check HTTP 200. **Not** proof of real PDF processing.
+**Stage A — verified current checkpoint:** HTTPS Stirling 3.4.0 UP; CLI installed and private token enrolled; authenticated HTTP 200; disposable PDF compress/merge smoke passed with validated page counts and text. The future Mesh adapter is not deployed or authenticated with an application credential.
 
-**Stage B — pending operational tests:** execute authenticated compression and merging with disposable non-sensitive PDFs; verify output content, integrity, negative/error cases, data-retention behavior, backup and isolated restoration.
+**Stage B — partially verified operations:** disposable authenticated compress/merge and sample output checks passed; input integrity, output non-overwrite and owner-only file permissions passed. Encrypted archive checksum and isolated configuration restore passed. Still pending: broader negative/malicious-PDF tests, runtime fault recovery, off-host backup replication, full database/application restore, credential rotation and retention verification.
 
 **Stage C — planned architecture:** define an adapter contract, capability probe, scoped credentials and policy review; implement with mocks and fail-closed identity/privacy/security tests before connecting actual documents.
 
