@@ -1,4 +1,4 @@
-name: Pinned GoreeCloud DNS client-health and Mesh contract (isolated)
+name: Source-pinned Go DNS process-only health contract (isolated)
 on:
   push:
     branches: [main]
@@ -14,30 +14,30 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Checkout exact reviewed first-party DNS source
+      - name: Checkout exact reviewed Go DNS source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/DNS
-          ref: 9bde4884363b79703d76f130e8db0d6625d42884
+          ref: 4e35c3138497bed00dd269778d5391fed2d8e756
           path: dns-source
           persist-credentials: false
       - name: Setup Node 24 for synthetic boundary tests
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - name: Verify immutable DNS health endpoint source and API documentation
+      - name: Verify immutable Go DNS source and process-only semantics
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C dns-source rev-parse HEAD)" = '9bde4884363b79703d76f130e8db0d6625d42884'
-          test "$(git -C dns-source hash-object DnsServerCore/WebServiceApi.cs)" = '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40'
-          test "$(git -C dns-source hash-object APIDOCS.md)" = 'fb1e769a04fc00e384189cee9f417532a4c75a22'
-          grep -Fq 'MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync)' dns-source/DnsServerCore/DnsWebService.cs
-          grep -Fq 'public async Task HealthCheckAsync(HttpContext context)' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN))' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DnsClient: View' dns-source/APIDOCS.md
-          grep -Fq '/api/dnsClient/healthCheck' dns-source/APIDOCS.md
-      - name: Validate default-deny minimal DNS projection against source-pinned fixture
+          test "$(git -C dns-source rev-parse HEAD)" = '4e35c3138497bed00dd269778d5391fed2d8e756'
+          test "$(git -C dns-source hash-object internal/server/server.go)" = '8649517e7b02499f49735bdf37c2eead2a1fc7fa'
+          test "$(git -C dns-source hash-object README.md)" = '0cf1b11f1d39635949bc388df886a431e1dd5080'
+          grep -Fq 'mux.HandleFunc("GET /healthz"' dns-source/internal/server/server.go
+          grep -Fq 'w.Header().Set("Content-Type", "text/plain; charset=utf-8")' dns-source/internal/server/server.go
+          grep -Fq 'w.Write([]byte("running\n"))' dns-source/internal/server/server.go
+          grep -Fq 'Process HTTP response only; does not test DNS upstream' dns-source/README.md || \
+            grep -Fq 'does not test DNS upstream' dns-source/README.md
+      - name: Validate explicit default-deny process-only DNS fixture
         shell: bash
         env:
           NODE_ENV: test
