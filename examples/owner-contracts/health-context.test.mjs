@@ -12,8 +12,8 @@ function adapters() {
     permit: () => true, clock: () => when,
     transport: async () => {
       transportCalls++;
-      return { status: 200, contentType: 'application/json; charset=utf-8',
-        body: '{"server":"dns-private.example","status":"ok"}' };
+      return { status: 200, contentType: 'text/plain; charset=utf-8',
+        body: 'running\n' };
     },
   };
   return [

@@ -213,3 +213,15 @@ Before implementation details or release status can be asserted, resolve:
 ## License
 
 The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
+
+
+**First-party VPN ownership contract update:** The retired Python VPN health source is superseded by an immutable Go control-plane development fixture. Its isolated Mesh-only health check consumes GET /healthz from reviewed first-party GoreeCloud/VPN source, without treating liveness as WireGuard, DNS or access-policy status. See [the source-owned Gateway/VPN fixture specification](docs/gateway-vpn-health-fixtures.md) and the pinned Go smoke workflow. Third-party NetBird deployment and operator files remain owned separately.
+
+
+**Native VPN inventory boundary:** The current immutable first-party Go source used by the Mesh health test now provides a distinct read-only viewer role. The isolated Mesh CI exercises role introspection and denied viewer writes; it neither provisions tokens on actual devices nor replaces GoreeCloud Identity, and it makes no data-plane health assertion.
+
+
+**First-party DNS source correction:** The pinned synthetic DNS status adapter now reads the actual Go DNS /healthz text-only process contract rather than a retired Technitium-derived C# DNS-client API. Tests require a precise body and prohibit exposing the bearer-protected DNS status counters. This restores the independent source boundary in development CI, not production DNS observability.
+
+
+**First-party Gateway source correction:** The current Gateway Go/Caddy source replaces the retired cmd/console contract; the pinned Mesh test builds the actual root Go module and React assets, checks GET /api/health, bearer-gated GET /api/status, hostile Host handling and process restart in a disposable loopback environment. It does not apply any ingress route, TLS certificate, DNS record or VPS configuration.

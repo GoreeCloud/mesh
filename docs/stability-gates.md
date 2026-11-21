@@ -101,21 +101,18 @@ Each actual integration requires dated evidence and a five-MIPS applicability di
 
 This is an engineering safety baseline, not a substitute for authoritative MIPS governance or permission to release.
 
-## VPN endpoint source sync (November 9, 2026 — development-only)
+## First-party VPN Go health source — isolated development contract (November 21, 2026)
 
-A new isolated Mesh CI candidate advances the trusted `GoreeCloud/VPN`
-management source from `13973c531d9c9147cdd353c06656e7ae4a796cf8`
-to exact reviewed and post-merge-tested `f232571d8c40211d9a5e8e177cee2b75970926e2`.
-The workflow verifies actual Git checkout commit and unchanged file blobs,
-explicitly updates the `core.py` Git blob check to
-`7a198a1d2f84e30e0fe84736cf0d1424ccedf221`, and runs the existing
-HTTP management unit tests **plus** the new offline
-`test_endpoint_hostname.py` regression before exercising the source-owned
-management server on a disposable loopback port.
+The current first-party GoreeCloud/VPN source is **Go**, not the retired Python management package. Mesh's immutable development contract now pins inspected VPN commit 3ddd651df50909337d446af1d2dbd2e950e187e5 and api/handler.go Git blob d5c146a3bcb59d6f12a224643e2a30f3cc38c972. The isolated workflow builds the actual Go vpnd application, executes Go race tests and a Node-only Mesh read-only health projection against disposable numeric localhost. The exact health response is newline-terminated {"status":"ok"} and must never be interpreted as an active WireGuard data plane, approved peer, packet firewall or production service.
 
-This tests canonical endpoint syntax rejection and local management/health
-fixture compatibility. It does **not** resolve an endpoint hostname, establish
-a WireGuard tunnel, verify X25519 enrollment, install packet filters, open a
-network ingress listener, or deliver a production Mesh-to-VPN connector.
-Source checks and hosted CI are distinct acceptance gates; this record
-documents the proposed integration until exact-head and post-merge checks pass.
+Both Mesh-level and owner-supplied permission gates deny health reads before any network transport. Anonymous and invalid bearer management requests fail, a valid synthetic test token permits read-only info, and process outage/restart are checked. No SSH, live Mesh network, real user, NetBird service, VPN private key, DNS, tunnel interface, firewall or externally routed endpoint is touched. Production Identity/consent and authenticated service-to-service trust remain separate release gates.
+
+
+### First-party Go DNS source liveness contract (November 21, 2026)
+
+The previously pinned Technitium-derived C# DNS files and endpoints are absent from current public GoreeCloud/DNS. The replacement source checkout is immutable Go commit 7bdb21f6b27611724f1c50091843b893fa5b1315, with internal/server/server.go blob c2c0e2e088f91e46076deaf1ae3a71d2c959e926 and README.md blob a3ca2d1b111cb3119e3cb3755ca908abc6fe775b. The Go process returns text/plain; charset=utf-8 body exactly running followed by LF at GET /healthz, without authentication. The detailed GET /api/v1/status requires bearer authentication; no Mesh fixture may invoke or project it. The source-checked contract compiles/race-tests the actual Go code and runs strict fixture deny/allow tests. This is HTTP process liveness ONLY, not DNS packet answers, DoH/DoT, upstream reachability, DNSSEC, availability, operational privacy or approved production Mesh integration.
+
+
+### Current first-party Gateway Go/Caddy owner source contract (November 21, 2026)
+
+The old pinned Gateway cmd/console/OIDC source path is absent from public GoreeCloud/gateway. Mesh now pins immutable current Go+Caddy source commit 35f005ecd0c77843b912fd07b98d7885c756a1f4 and source-owned main.go/internal/gateway/http.go blobs. The first-party root Go binary requires a built React web/dist and starts through serve -listen 127.0.0.1:<port> with owner-private state and a runtime-only GATEWAY_ADMIN_TOKEN. It supports only loopback health GET /api/health yielding {"ok":true} LF and authenticated read-only GET /api/status. Mesh tests the actual sandboxed process and an independently injected, default-deny synthetic status projection. This is not a Caddy production route, ACME, DNS, certificate or secure administrative Identity claim. No owner Gateway source files were changed.

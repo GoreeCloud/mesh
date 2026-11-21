@@ -30,9 +30,11 @@ async function choosePort() {
 }
 
 function start(binary, directory, port, token) {
-  const child = spawn(binary, ['-listen', '127.0.0.1:' + port], {
+  const child = spawn(binary, ['serve', '-listen', '127.0.0.1:' + port,
+    '-sites', join(directory, 'sites.json'), '-state-dir', join(directory, 'managed')], {
     cwd: directory,
-    env: { GOREE_GATEWAY_CONSOLE_TOKEN: token },
+    env: { GATEWAY_ADMIN_TOKEN: token, HOME: directory,
+      XDG_CONFIG_HOME: directory, XDG_DATA_HOME: directory },
     stdio: 'ignore',
   });
   child.on('error', () => {});
@@ -53,13 +55,13 @@ async function stop(child) {
   }
 }
 
-async function sourceRequest(port, path, { method = 'GET', token = '', origin = '' } = {}) {
-  assert.ok(['/healthz', '/api/v1/overview'].includes(path));
+async function sourceRequest(port, path, { method = 'GET', token = '', hostHeader = '' } = {}) {
+  assert.ok(['/api/health', '/api/status'].includes(path));
   assert.ok(['GET', 'POST'].includes(method));
   return new Promise((resolveData, reject) => {
     const headers = {};
     if (token) headers.Authorization = 'Bearer ' + token;
-    if (origin) headers['Sec-Fetch-Site'] = origin;
+    if (hostHeader) headers.Host = hostHeader;
     const req = httpRequest({
       host: '127.0.0.1', family: 4, port, path, method, headers, agent: false,
     }, res => {
@@ -106,11 +108,11 @@ async function main() {
     permit: () => ownerAllowed,
     clock: () => OBSERVED_AT,
     transport: async ({ method, path, signal }) => {
-      if (method !== 'GET' || path !== '/healthz' || signal?.aborted) {
+      if (method !== 'GET' || path !== '/api/health' || signal?.aborted) {
         throw new Error('invalid source contract operation');
       }
       transportCalls++;
-      return sourceRequest(port, '/healthz');
+      return sourceRequest(port, '/api/health');
     },
   });
   const harness = createSyntheticHarness({
@@ -149,26 +151,29 @@ async function main() {
       await sleep(100);
     }
     assert.ok(healthy, 'reviewed Gateway console did not start on isolated loopback');
-    const live = await sourceRequest(port, '/healthz');
+    const live = await sourceRequest(port, '/api/health');
     assert.equal(live.status, 200);
     assert.equal(live.contentType, 'application/json; charset=utf-8');
     assert.equal(live.body, BODY);
-    assert.equal((await sourceRequest(port, '/healthz', { method: 'POST' })).status, 405);
-    assert.equal((await sourceRequest(port, '/api/v1/overview')).status, 401);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
+    assert.equal((await sourceRequest(port, '/api/health', { method: 'POST' })).status, 401);
+    assert.equal((await sourceRequest(port, '/api/status')).status, 401);
+    assert.equal((await sourceRequest(port, '/api/status',
       { token: 'incorrect' })).status, 401);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
+    assert.equal((await sourceRequest(port, '/api/status',
       { token, method: 'POST' })).status, 405);
-    assert.equal((await sourceRequest(port, '/api/v1/overview',
-      { token, origin: 'cross-site' })).status, 403);
-    // This valid-token call may return "unreachable" because the pinned
-    // console's default local admin API is NOT started. Never confuse
-    // successful console auth with live Caddy ingress/route availability.
-    const authorized = await sourceRequest(port, '/api/v1/overview', { token });
+    assert.equal((await sourceRequest(port, '/api/status',
+      { token, hostHeader: 'attacker.example' })).status, 403);
+    // This only proves an authenticated read of the managed console,
+    // never actual Caddy routing, certificate issuance or external ingress.
+    const authorized = await sourceRequest(port, '/api/status', { token });
     assert.equal(authorized.status, 200);
     const projection = JSON.parse(authorized.body);
-    assert.ok(['unreachable', 'connected'].includes(projection.state));
-    assert.equal(projection.api_version, 'v1');
+    assert.equal(projection.name,'GoreeCloud Gateway');
+    assert.equal(projection.engine,'Caddy v2');
+    assert.equal(projection.management,'loopback');
+    assert.equal(projection.writable,false);
+    assert.equal(projection.siteCount,0);
+    assert.equal(typeof projection.running,'boolean');
     assert.equal('raw_config' in projection, false);
 
     ownerAllowed = false;
