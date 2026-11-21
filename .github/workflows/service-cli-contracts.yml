@@ -23,6 +23,6 @@ jobs:
       - name: Check out repository (pinned upstream action)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Compile local CLI
-        run: python3 -m py_compile tools/remote-service-cli/gc-services.py
+        run: python3 -m py_compile tools/remote-service-cli/gc-services.py tools/remote-service-cli/stirling-pdf.py
       - name: Run pure-Python safety tests (no network credentials)
         run: python3 -m unittest discover -v -s tools/remote-service-cli -p test_cli.py
