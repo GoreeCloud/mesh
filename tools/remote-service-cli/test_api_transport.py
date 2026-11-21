@@ -97,7 +97,7 @@ class IsolatedTransportTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertEqual(json.loads(path.read_text()), {"fixture": "ok"})
             self.assertNotIn("fixture", out.getvalue())
-            with self.assertRaises(FileExistsError):
+            with self.assertRaises(SystemExit):
                 with contextlib.redirect_stdout(io.StringIO()):
                     mod.request("vikunja", "GET", "/api/v2/info", cfg={"secret":"fixture"}, output=path)
 
