@@ -216,3 +216,6 @@ Before implementation details or release status can be asserted, resolve:
 ## License
 
 The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
+
+
+**DNS source-check note (November 21, 2026):** The isolated DNS process-only health adapter now pins the protected first-party GoreeCloud/DNS source after the DoH, encrypted recovery, fuzz regression, and partial SBOM commits. This source-pin refresh does not assert DNS resolution/health, override owner/Identity policy, or resolve unrelated failed Gateway, VPN, Calendar and Identity source contract gates.
