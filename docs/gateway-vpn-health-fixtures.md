@@ -5,7 +5,7 @@
 ## Current verified source-owned behavior — November 21, 2026
 
 - **Gateway console**: The pinned current Go Gateway console health fixture now uses GET /api/health as exact console process liveness and does not assert Caddy ingress, TLS, ACME or reverse-proxy status.
-- **First-party GoreeCloud VPN Go control plane**: Pinned repository commit 3ddd651df50909337d446af1d2dbd2e950e187e5 and Git blob d5c146a3bcb59d6f12a224643e2a30f3cc38c972 from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
+- **First-party GoreeCloud VPN Go control plane**: Pinned repository commit fa21721b241cc99d2c35ed7c5b8a27e73f597fc8 and Git blob d5c146a3bcb59d6f12a224643e2a30f3cc38c972 from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
 
 The authenticated Go GET /v1/info explicitly states tunnel_operational:false. It is tested separately in the owned disposable localhost process, never substituted for the unauthenticated Mesh health projection.
 
@@ -25,7 +25,7 @@ Gateway's live Caddy ingress and production DNS/ACME state, VPN data plane, and 
 
 ## Immutable first-party Go VPN source acceptance (isolated, November 21, 2026)
 
-The dedicated .github/workflows/vpn-real-go-contract.yml workflow checks out first-party GoreeCloud/VPN source at the immutable 3ddd651df50909337d446af1d2dbd2e950e187e5 revision and verifies the exact API blob, module identity, absence of legacy Python source and absence of third-party NetBird deployment ownership. It uses official SHA-pinned checkout, Go and Node setup actions. Go race tests, vet and a local binary compilation are independent from Mesh synthetic fixture tests.
+The dedicated .github/workflows/vpn-real-go-contract.yml workflow checks out first-party GoreeCloud/VPN source at the immutable fa21721b241cc99d2c35ed7c5b8a27e73f597fc8 revision and verifies the exact API blob, module identity, absence of legacy Python source and absence of third-party NetBird deployment ownership. It uses official SHA-pinned checkout, Go and Node setup actions. Go race tests, vet and a local binary compilation are independent from Mesh synthetic fixture tests.
 
 vpn-real-go.smoke.mjs starts that genuine Go vpnd binary only as a disposable numeric-loopback process with temporary randomized administrator credentials and owner-private state. Mesh-plus-owner permit checks deny before transport, and the exact newline-terminated JSON reply is projected to the minimum synthetic status; anonymous or incorrect-token management reads are denied. Process outage and controlled restart are tested, including stale metadata ownership locking. The test creates no tunnel, privileged interface, firewall, DNS, external endpoint, real user or VPS service. It must not run on ordinary hosts: the script requires the exact hosted GitHub CI environment and checked source.
 
@@ -46,3 +46,8 @@ The pinned Go control plane now supports an independent read-only viewer token. 
 ### GoreeShield viewer response minimization (isolated CI)
 
 The current immutable first-party Go source restricts its viewer peer projection to name, private /32 address and textual pending/approved/revoked status. The source integration test creates a synthetic peer using an ephemeral X25519 public key with the administrator credential in a disposable localhost control plane and verifies that the viewer response contains exactly those three keys while the administrator retains the full management record. It verifies viewer mutations remain denied and that the same minimal state survives a controlled daemon restart. Production Identity scoping and public network exposure remain prohibited and untested.
+
+
+### Updated reviewed first-party VPN Go source pin — November 21, 2026
+
+The Mesh Go-health job now checks out immutable GoreeCloud/VPN commit fa21721b241cc99d2c35ed7c5b8a27e73f597fc8, including verified Android Material 3 Expressive and Qt Network viewer code, reviewed-source GoreeCloud UI tokens, offline signed firewall reviews and a PRIVATE local review-generation ledger. The exact API handler blob remains d5c146a3bcb59d6f12a224643e2a30f3cc38c972, so the existing read-only inventory minimization and Go /healthz tests still apply. The Mesh job deliberately builds only the Go vpnd source. The new offline reviewer, UI and native capabilities are owned by VPN and are NOT considered deployed via Mesh; the ledger is not authoritative gateway apply state. Calendar and Identity source-contract checkouts remain independently blocked.
