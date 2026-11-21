@@ -6,10 +6,10 @@ import { createDNSHealthFixtureAdapter, DNS_HEALTH_CONTRACT } from './dns-health
 import { createSyntheticMcpToolBridge } from '../synthetic/mcp-tool-bridge.mjs';
 import { createSyntheticStatelessMcpDispatcher, SYNTHETIC_MCP_VERSION } from '../synthetic/mcp-stateless-fixture.mjs';
 
-const PATH = '/api/dnsClient/healthCheck';
+const PATH = '/healthz';
 const observed = '2026-11-10T17:00:00.000Z';
-const body = '{"server":"dns-lab.internal","status":"ok"}';
-const response = b => ({ status: 200, contentType: 'application/json; charset=utf-8', body: b });
+const body = 'running\n';
+const response = b => ({ status: 200, contentType: 'text/plain; charset=utf-8', body: b });
 const request = { actor: 'fixture.reader', capabilityId: 'dns.health', operation: 'status.read' };
 const denied = { ok: false, error: { code: 'denied' } };
 
@@ -29,23 +29,23 @@ function harness(options, meshPermit = () => true) {
   });
 }
 
-test('source-pinned DNS client health is not encrypted DNS readiness', () => {
+test('source-pinned Go DNS process health is not recursive DNS readiness', () => {
   assert.equal(DNS_HEALTH_CONTRACT.source, 'GoreeCloud/DNS');
   assert.equal(DNS_HEALTH_CONTRACT.source_blob,
-    '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40');
+    'c2c0e2e088f91e46076deaf1ae3a71d2c959e926');
   assert.equal(DNS_HEALTH_CONTRACT.docs_blob,
-    'fb1e769a04fc00e384189cee9f417532a4c75a22');
+    'a3ca2d1b111cb3119e3cb3755ca908abc6fe775b');
   assert.equal(DNS_HEALTH_CONTRACT.path, PATH);
   assert.equal(DNS_HEALTH_CONTRACT.method, 'GET');
-  assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'DnsClient: View');
+  assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'Public process liveness (not resolver readiness)');
   assert.equal(DNS_HEALTH_CONTRACT.mode, 'transport-injected-nonproduction');
   const source = readFileSync(new URL('./dns-health.mjs', import.meta.url), 'utf8');
   assert.equal(source.includes('fetch('), false);
   assert.equal(source.includes('https://'), false);
 });
 
-test('two exact source-envelope orderings produce minimal synthetic status', async () => {
-  for (const variant of [body, '{"status":"ok","server":"dns-lab.internal"}']) {
+test('exact Go plain-text source response produces minimal synthetic status', async () => {
+  for (const variant of [body]) {
     let transports = 0;
     const result = await harness({
       permit: () => true, clock: () => observed,
@@ -88,8 +88,13 @@ test('both Mesh and owner permits must grant independently before transport', as
   assert.equal(transports, 0);
 });
 
-test('wrong status, duplicate JSON keys, escapes, server labels and added fields fail closed', async () => {
+test('wrong process liveness response, JSON ambiguity and added content fail closed', async () => {
   const invalid = [
+    'running',
+    'running\r\n',
+    'running\nextra',
+    'not-running\n',
+    'RUNNING\n',
     '{"status":"error","server":"dns-lab.internal"}',
     '{"server":"dns-lab.internal","status":"ok","status":"ok"}',
     '{"server":"dns-lab.internal","status":"ok","private":"secret"}',

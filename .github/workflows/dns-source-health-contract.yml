@@ -1,4 +1,4 @@
-name: Pinned GoreeCloud DNS client-health and Mesh contract (isolated)
+name: Pinned current first-party Go DNS health and Mesh fixture (isolated)
 on:
   push:
     branches: [main]
@@ -7,37 +7,51 @@ permissions:
   contents: read
 jobs:
   dns-source-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout Mesh without persisted credentials
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Checkout exact reviewed first-party DNS source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Checkout immutable current first-party DNS Go source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: GoreeCloud/DNS
-          ref: 9bde4884363b79703d76f130e8db0d6625d42884
+          ref: 7bdb21f6b27611724f1c50091843b893fa5b1315
           path: dns-source
           persist-credentials: false
-      - name: Setup Node 24 for synthetic boundary tests
+      - name: Use DNS source-declared Go version
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: dns-source/go.mod
+          cache: false
+      - name: Setup Node 24 for Mesh fixture
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
-      - name: Verify immutable DNS health endpoint source and API documentation
+      - name: Verify immutable current Go DNS process liveness source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C dns-source rev-parse HEAD)" = '9bde4884363b79703d76f130e8db0d6625d42884'
-          test "$(git -C dns-source hash-object DnsServerCore/WebServiceApi.cs)" = '333b11d0c32b9cd57bcb561fb2d94fa4e8e4ea40'
-          test "$(git -C dns-source hash-object APIDOCS.md)" = 'fb1e769a04fc00e384189cee9f417532a4c75a22'
-          grep -Fq 'MapGetAndPost("/api/dnsClient/healthCheck", _api.HealthCheckAsync)' dns-source/DnsServerCore/DnsWebService.cs
-          grep -Fq 'public async Task HealthCheckAsync(HttpContext context)' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DirectQueryAsync(new DnsQuestionRecord(domain, type, DnsClass.IN))' dns-source/DnsServerCore/WebServiceApi.cs
-          grep -Fq 'DnsClient: View' dns-source/APIDOCS.md
-          grep -Fq '/api/dnsClient/healthCheck' dns-source/APIDOCS.md
-      - name: Validate default-deny minimal DNS projection against source-pinned fixture
+          test "$(git -C dns-source rev-parse HEAD)" = '7bdb21f6b27611724f1c50091843b893fa5b1315'
+          test "$(git -C dns-source hash-object internal/server/server.go)" = 'c2c0e2e088f91e46076deaf1ae3a71d2c959e926'
+          test "$(git -C dns-source hash-object README.md)" = 'a3ca2d1b111cb3119e3cb3755ca908abc6fe775b'
+          grep -Fq 'module github.com/GoreeCloud/DNS' dns-source/go.mod
+          grep -Fq 'mux.HandleFunc("GET /healthz"' dns-source/internal/server/server.go
+          grep -Fq '"text/plain; charset=utf-8"' dns-source/internal/server/server.go
+          grep -Fq 'w.Write([]byte("running' dns-source/internal/server/server.go
+          grep -Fq 'mux.HandleFunc("GET /api/v1/status", s.apiAuth(' dns-source/internal/server/server.go
+          test ! -e dns-source/DnsServerCore/WebServiceApi.cs
+      - name: Build and test actual current Go DNS source without production listeners
+        working-directory: dns-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race -count=1 ./internal/server ./cmd/dnsd
+          go vet ./internal/server ./cmd/dnsd
+          go build -trimpath -o ./dnsd-source-check ./cmd/dnsd
+      - name: Validate strict synthetic text-only DNS liveness projection
         shell: bash
         env:
           NODE_ENV: test

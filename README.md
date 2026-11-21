@@ -219,3 +219,6 @@ The GoreeCloud-controlled source and documentation in this repository are provid
 
 
 **Native VPN inventory boundary:** The current immutable first-party Go source used by the Mesh health test now provides a distinct read-only viewer role. The isolated Mesh CI exercises role introspection and denied viewer writes; it neither provisions tokens on actual devices nor replaces GoreeCloud Identity, and it makes no data-plane health assertion.
+
+
+**First-party DNS source correction:** The pinned synthetic DNS status adapter now reads the actual Go DNS /healthz text-only process contract rather than a retired Technitium-derived C# DNS-client API. Tests require a precise body and prohibit exposing the bearer-protected DNS status counters. This restores the independent source boundary in development CI, not production DNS observability.
