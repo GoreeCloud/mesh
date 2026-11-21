@@ -24,8 +24,8 @@ gc-services auth-check plane
 gc-services auth-check adguard
 gc-services auth-check stirling
 gc-services api vikunja GET /api/v1/projects --output ./vikunja-private.json
-gc-services api plane GET /api/v1/workspaces/WORKSPACE_SLUG/projects/
-gc-services api adguard GET /control/status
+gc-services api plane GET /api/v1/workspaces/WORKSPACE_SLUG/projects/ --output ./plane-projects.json
+gc-services api adguard GET /control/status --output ./adguard-status.json
 gc-services api vikunja POST /api/v1/projects --data-file ./project.json --dry-run
 # Only after independently confirmed permissions and recovery:
 gc-services api adguard POST /control/filtering/refresh --confirm-write
@@ -42,7 +42,7 @@ gc-services logout vikunja
 
 Vikunja API tokens use `Authorization: Bearer`; Plane keys use `X-API-Key`; AdGuard uses HTTP Basic **over loopback only**. Enter secrets only through private TTY prompts after creating scoped credentials in the service. Successful login checks an authenticated endpoint before storing. Files live at `~/.config/goreecloud/service-cli/<service>.json` (0700 dir/0600 file), never in repository, process args, logs or ChatGPT conversation. Stirling retains its separate private credential/header.
 
-All requests target hard-coded HTTPS GoreeCloud origins or the host's AdGuard loopback port. Redirects and environment proxies are refused to prevent credential forwarding. Write methods require `--confirm-write`. API replies can contain private user data: avoid broadcasting stdout; `--output` securely creates a non-overwriting 0600 output file. Data files must contain JSON and never be committed. For destructive operations require a service-specific, tested rollback. The caller's user/API role and Docker access still determine real authority.
+All requests target hard-coded HTTPS GoreeCloud origins or the host's AdGuard loopback port. Redirects and environment proxies are refused to prevent credential forwarding. Write methods require `--confirm-write`. API replies can contain private user data: their bodies are suppressed by default. Use explicit `--show-data` only for intended terminal display; `--output` securely creates a non-overwriting 0600 output file. Data files must contain JSON and never be committed. For destructive operations require a service-specific, tested rollback. The caller's user/API role and Docker access still determine real authority.
 
 Caddy `routes` intentionally shows only site-block names, not passwords or complete configuration. `validate` is read-only. `reload` validates first and writes a private **candidate** snapshot, but **does not guarantee a valid restore** or production acceptance. This wrapper cannot fix rollback if the Caddyfile has already been overwritten. Protect the mounted config and encrypted backups separately.
 
