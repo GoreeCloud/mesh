@@ -23,7 +23,7 @@ This is an evidence-based snapshot, not a claim that a native GoreeCloud PDF pro
 | ChatGPT automation | **Conditional capability**, not a deployed chat tool: authorized Remote Desktop Commander access could execute the CLI while a live device connection and accessible files are available |
 | GoreeCloud Mesh provider adapter | **Nonproduction source contract tested in [PR #115](https://github.com/GoreeCloud/mesh/pull/115)**: deny-first operations, fixed-origin transport, bounded bytes and concurrency, 10 isolated Node tests; NOT deployed, no approved service credential or application API |
 | GoreeCloud applications using this provider | **No verified application integration** |
-| Encrypted backup and recovery | **Partial**: encrypted archive checksum and isolated restore of Stirling Compose/Caddy config matched live files; full application/database restore and off-host replication remain unverified. Daily user backup timer stays disabled while service user manager lacks Docker group |
+| Encrypted backup and recovery | **Partial, now verified to isolated application boot**: archived Stirling config/database restored into an ephemeral Docker container with networking disabled and no host ports; local health HTTP 200 and unauthenticated API HTTP 401; cleanup verified, live production remained healthy. Off-host replication, authenticated account/data tests and continuous scheduled backup acceptance remain unverified. Daily user backup timer stays disabled while its systemd user manager lacks Docker group |
 
 **Important distinction:** a working personal API token on a VPS does not grant all GoreeCloud products access to that token, and does not imply that ChatGPT can process arbitrary chat attachments automatically.
 
@@ -126,7 +126,7 @@ These requirements are not proof the temporary provider enforces them. They are 
 
 **Stage A — verified current checkpoint:** HTTPS Stirling 3.4.0 UP; CLI installed and private token enrolled; authenticated HTTP 200; disposable PDF compress/merge smoke passed with validated page counts and text. The future Mesh adapter is not deployed or authenticated with an application credential.
 
-**Stage B — partially verified operations:** disposable authenticated compress/merge and sample output checks passed; input integrity, output non-overwrite and owner-only file permissions passed. Encrypted archive checksum and isolated configuration restore passed. Still pending: broader negative/malicious-PDF tests, runtime fault recovery, off-host backup replication, full database/application restore, credential rotation and retention verification.
+**Stage B — partially verified operations:** disposable authenticated compress/merge and sample output checks passed; input integrity, output non-overwrite and owner-only file permissions passed. Encrypted archive checksum, isolated configuration comparison and actual isolated application boot from restored database/config passed (health 200, unauthenticated PDF API 401; network disabled; container and scratch cleaned). Still pending: authenticated restored-account/data and document-operation validation, broader malicious-PDF tests, runtime fault recovery, off-host backup replication, credential rotation and retention verification.
 
 **Stage C — planned architecture:** define an adapter contract, capability probe, scoped credentials and policy review; implement with mocks and fail-closed identity/privacy/security tests before connecting actual documents.
 
