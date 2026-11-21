@@ -344,7 +344,11 @@ def main():
                 fail("Stirling wrapper does not support HEAD.")
             if not args.path.startswith("/api/v1/") or ".." in args.path or "://" in args.path or "#" in args.path or any(ord(ch) < 32 for ch in args.path):
                 fail("Invalid Stirling API path.")
-            print(run([str(Path.home() / ".local/bin" / "stirling-pdf"), "api", args.method, args.path]))
+            api_response = run([str(Path.home() / ".local/bin" / "stirling-pdf"), "api", args.method, args.path])
+            if args.show_data:
+                print(api_response)
+            else:
+                print("Stirling API request succeeded; response body suppressed. Use --show-data for explicit output.")
         else:
             data = None
             if args.data_file:
