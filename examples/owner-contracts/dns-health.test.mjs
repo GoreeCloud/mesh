@@ -32,9 +32,9 @@ function harness(options, meshPermit = () => true) {
 test('source-pinned Go DNS process health is not resolver readiness', () => {
   assert.equal(DNS_HEALTH_CONTRACT.source, 'GoreeCloud/DNS');
   assert.equal(DNS_HEALTH_CONTRACT.source_blob,
-    'c2c0e2e088f91e46076deaf1ae3a71d2c959e926');
+    '8649517e7b02499f49735bdf37c2eead2a1fc7fa');
   assert.equal(DNS_HEALTH_CONTRACT.docs_blob,
-    'a3ca2d1b111cb3119e3cb3755ca908abc6fe775b');
+    '0cf1b11f1d39635949bc388df886a431e1dd5080');
   assert.equal(DNS_HEALTH_CONTRACT.path, PATH);
   assert.equal(DNS_HEALTH_CONTRACT.method, 'GET');
   assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'none; Mesh and owner permits still required');
