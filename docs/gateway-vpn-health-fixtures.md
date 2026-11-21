@@ -5,7 +5,7 @@
 ## Current verified source-owned behavior — November 21, 2026
 
 - **Gateway console**: The existing pinned development Gateway console health fixture remains unchanged. GET /healthz is limited to console process liveness and does not assert Caddy ingress, TLS, ACME or reverse-proxy status.
-- **First-party GoreeCloud VPN Go control plane**: Pinned repository commit c6407faa2cd4626362a7afd1cbf7dced2959aebd and Git blob f1afbc60418bcdcab32a48e2b6358c595dd3175a from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
+- **First-party GoreeCloud VPN Go control plane**: Pinned repository commit 09eb75dca0dadabcf0df1898c64e3877e5802dee and Git blob d502a8e7e859c78a038ad92874eed7e224bf83b6 from internal/api/handler.go. GET /healthz emits newline-terminated JSON {"status":"ok"} with Content-Type application/json; charset=utf-8. This is **process liveness only**, never a WireGuard tunnel, packet authorization, DNS state, approved peer policy or encrypted backup recovery signal. The older Python management source was retired; its source pin and exact-reply fixture were removed from current-facing contract tests.
 
 The authenticated Go GET /v1/info explicitly states tunnel_operational:false. It is tested separately in the owned disposable localhost process, never substituted for the unauthenticated Mesh health projection.
 
@@ -25,7 +25,7 @@ Gateway's live Caddy ingress and production DNS/ACME state, VPN data plane, and 
 
 ## Immutable first-party Go VPN source acceptance (isolated, November 21, 2026)
 
-The dedicated .github/workflows/vpn-real-go-contract.yml workflow checks out first-party GoreeCloud/VPN source at the immutable c6407faa2cd4626362a7afd1cbf7dced2959aebd revision and verifies the exact API blob, module identity, absence of legacy Python source and absence of third-party NetBird deployment ownership. It uses official SHA-pinned checkout, Go and Node setup actions. Go race tests, vet and a local binary compilation are independent from Mesh synthetic fixture tests.
+The dedicated .github/workflows/vpn-real-go-contract.yml workflow checks out first-party GoreeCloud/VPN source at the immutable 09eb75dca0dadabcf0df1898c64e3877e5802dee revision and verifies the exact API blob, module identity, absence of legacy Python source and absence of third-party NetBird deployment ownership. It uses official SHA-pinned checkout, Go and Node setup actions. Go race tests, vet and a local binary compilation are independent from Mesh synthetic fixture tests.
 
 vpn-real-go.smoke.mjs starts that genuine Go vpnd binary only as a disposable numeric-loopback process with temporary randomized administrator credentials and owner-private state. Mesh-plus-owner permit checks deny before transport, and the exact newline-terminated JSON reply is projected to the minimum synthetic status; anonymous or incorrect-token management reads are denied. Process outage and controlled restart are tested, including stale metadata ownership locking. The test creates no tunnel, privileged interface, firewall, DNS, external endpoint, real user or VPS service. It must not run on ordinary hosts: the script requires the exact hosted GitHub CI environment and checked source.
 
@@ -40,3 +40,7 @@ The smoke exercises the exact `/healthz` Go response through the existing transp
 The endpoint `/healthz` proves only that the **console process** can answer. Even a correct-token `/api/v1/overview` response proves neither actual Gateway ingress health nor public TLS, DNS, route parity, certificate renewal, backup recovery or tenant-scoped Identity permission. Until exact-head CI and reviewed source ownership succeed, this addition is **proposed development acceptance**, not a shipped connector. Passing does not authorize production deployment.
 
 The reviewed Gateway source commit also contains an authenticated `/api/v1/readiness` endpoint. This source-owned Mesh integration intentionally probes **only** `/healthz`: neither its contract nor the loopback test treats console liveness as administrative readiness or ingress route/TLS health.
+
+### Native inventory least-privilege source check
+
+The pinned Go control plane now supports an independent read-only viewer token. The disposable Mesh source test starts the real Go binary with independent randomized admin/viewer credentials, checks access_role=admin and access_role=viewer introspection, validates read-only GET requests and rejects viewer POST/DELETE mutations with HTTP 403 before rechecking after restart. This remains an isolated test, not a production Identity integration, distributed credential mechanism or deployed Mesh connector.

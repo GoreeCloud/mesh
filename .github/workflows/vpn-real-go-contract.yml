@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: GoreeCloud/VPN
-          ref: c6407faa2cd4626362a7afd1cbf7dced2959aebd
+          ref: 09eb75dca0dadabcf0df1898c64e3877e5802dee
           path: vpn-source
           persist-credentials: false
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -30,10 +30,12 @@ jobs:
       - name: Verify exact first-party source and immutable Go API contract
         run: |
           set -euo pipefail
-          test "$(git -C vpn-source rev-parse HEAD)" = "c6407faa2cd4626362a7afd1cbf7dced2959aebd"
-          test "$(git -C vpn-source hash-object internal/api/handler.go)" = "f1afbc60418bcdcab32a48e2b6358c595dd3175a"
+          test "$(git -C vpn-source rev-parse HEAD)" = "09eb75dca0dadabcf0df1898c64e3877e5802dee"
+          test "$(git -C vpn-source hash-object internal/api/handler.go)" = "d502a8e7e859c78a038ad92874eed7e224bf83b6"
           grep -Fq 'module github.com/GoreeCloud/VPN' vpn-source/go.mod
           grep -Fq '"tunnel_operational"' vpn-source/internal/api/handler.go
+          grep -Fq '"access_role"' vpn-source/internal/api/handler.go
+          grep -Fq '"viewer-token-file"' vpn-source/cmd/vpnd/main.go
           test ! -e vpn-source/deploy/netbird
           test ! -e vpn-source/src/goreecloud_vpn/server.py
       - name: Compile and run first-party Go management unit tests

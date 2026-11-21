@@ -16,7 +16,7 @@ const plans = [
   {
     label: 'VPN management', owner: 'vpn', capability: 'vpn.health',
     source: 'GoreeCloud/VPN',
-    blob: 'f1afbc60418bcdcab32a48e2b6358c595dd3175a',
+    blob: 'd502a8e7e859c78a038ad92874eed7e224bf83b6',
     adapter: createVPNHealthFixtureAdapter, contract: VPN_HEALTH_CONTRACT,
     body: '{"status":"ok"}\n',
   },

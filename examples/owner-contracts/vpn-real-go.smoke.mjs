@@ -30,6 +30,7 @@ function startVPN(binary, root, port) {
     '--listen', '127.0.0.1:' + port,
     '--state-dir', join(root, 'state'),
     '--token-file', join(root, 'admin-token'),
+    '--viewer-token-file', join(root, 'viewer-token'),
   ], {cwd: root, stdio: 'ignore'});
   child.on('error', () => {});
   return child;
@@ -44,13 +45,13 @@ async function stopVPN(child) {
     await Promise.race([new Promise(ok => child.once('exit', ok)), sleep(850)]);
   }
 }
-function loopback(port, path = '/healthz', token = '') {
+function loopback(port, path = '/healthz', token = '', method = 'GET') {
   assert.ok(['/healthz', '/v1/peers', '/v1/info'].includes(path));
   return new Promise((yes, no) => {
     const headers = {};
     if (token) headers.Authorization = 'Bearer ' + token;
     const req = httpRequest({
-      host: '127.0.0.1', family: 4, port, path, method: 'GET',
+      host: '127.0.0.1', family: 4, port, path, method,
       agent: false, headers,
     }, response => {
       let body = '';
@@ -85,6 +86,9 @@ async function main() {
   await chmod(root, 0o700);
   const token = randomBytes(48).toString('hex');
   await writeFile(join(root, 'admin-token'), token + '\n', {flag:'wx', mode:0o600});
+  const viewer = randomBytes(48).toString('hex');
+  assert.notEqual(token,viewer);
+  await writeFile(join(root, 'viewer-token'), viewer + '\n', {flag:'wx', mode:0o600});
   const port = await choosePort();
   let transportCalls = 0;
   let meshPermit = false;
@@ -140,6 +144,14 @@ async function main() {
     const info = await loopback(port, '/v1/info', token);
     assert.equal(info.status,200);
     assert.equal(JSON.parse(info.body).tunnel_operational,false);
+    assert.equal(JSON.parse(info.body).access_role,'admin');
+    const viewerInfo = await loopback(port, '/v1/info', viewer);
+    assert.equal(viewerInfo.status,200);
+    assert.equal(JSON.parse(viewerInfo.body).access_role,'viewer');
+    assert.equal(JSON.parse(viewerInfo.body).tunnel_operational,false);
+    assert.equal((await loopback(port, '/v1/peers', viewer)).status,200);
+    assert.equal((await loopback(port, '/v1/peers', viewer, 'POST')).status,403);
+    assert.equal((await loopback(port, '/v1/peers', viewer, 'DELETE')).status,403);
     assert.equal((await loopback(port, '/v1/peers', token)).status,200);
     process.stdout.write('checkpoint=go_control_plane_liveness_and_bearer_denial\n');
     ownerPermit = false;
@@ -158,6 +170,8 @@ async function main() {
     }
     assert.equal(restored,true,'Go management process did not restart with private state');
     assert.equal((await loopback(port,'/v1/peers')).status,401);
+    assert.equal(JSON.parse((await loopback(port,'/v1/info',viewer)).body).access_role,'viewer');
+    assert.equal((await loopback(port,'/v1/peers',viewer,'POST')).status,403);
     process.stdout.write('PASS: pinned first-party Go VPN / Mesh local read-only health contract\n');
   } finally {
     await stopVPN(child);
