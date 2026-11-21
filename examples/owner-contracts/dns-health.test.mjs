@@ -34,7 +34,7 @@ test('source-pinned Go DNS process health is not resolver readiness', () => {
   assert.equal(DNS_HEALTH_CONTRACT.source_blob,
     'e5cf4426cc884a0414515275f87c68d2502e4591');
   assert.equal(DNS_HEALTH_CONTRACT.docs_blob,
-    '8a8a313a77a1c4da4bc4d0d4eeea17a5a4ee9a7f');
+    'b1aeb8fc76e5ae304414b47d881ecd25ce3f0f32');
   assert.equal(DNS_HEALTH_CONTRACT.path, PATH);
   assert.equal(DNS_HEALTH_CONTRACT.method, 'GET');
   assert.equal(DNS_HEALTH_CONTRACT.source_permission, 'none; Mesh and owner permits still required');

@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           test "$(git -C dns-source rev-parse HEAD)" = '9a2cdecc3b47c7953ff3a987c18217274ebf49fc'
           test "$(git -C dns-source hash-object internal/server/server.go)" = 'e5cf4426cc884a0414515275f87c68d2502e4591'
-          test "$(git -C dns-source hash-object README.md)" = '8a8a313a77a1c4da4bc4d0d4eeea17a5a4ee9a7f'
+          test "$(git -C dns-source hash-object README.md)" = 'b1aeb8fc76e5ae304414b47d881ecd25ce3f0f32'
           grep -Fq 'mux.HandleFunc("GET /healthz"' dns-source/internal/server/server.go
           grep -Fq 'w.Header().Set("Content-Type", "text/plain; charset=utf-8")' dns-source/internal/server/server.go
           grep -Fq 'w.Write([]byte("running\n"))' dns-source/internal/server/server.go
