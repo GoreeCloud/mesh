@@ -10,7 +10,7 @@ const unavailable = () => new Error('source health unavailable');
 
 export const DNS_HEALTH_CONTRACT = Object.freeze({
   source: 'GoreeCloud/DNS',
-  source_blob: '138f46e1ac49d8ccdb3fae05a41cf234e56236b4',
+  source_blob: 'e5cf4426cc884a0414515275f87c68d2502e4591',
   docs_blob: '8a8a313a77a1c4da4bc4d0d4eeea17a5a4ee9a7f',
   method: 'GET',
   path: PATH,

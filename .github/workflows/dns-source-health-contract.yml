@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: GoreeCloud/DNS
-          ref: a60613e7f4029799c878eca0b7da825f774e4f46
+          ref: 9a2cdecc3b47c7953ff3a987c18217274ebf49fc
           path: dns-source
           persist-credentials: false
       - name: Setup Node 24 for synthetic boundary tests
@@ -29,8 +29,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C dns-source rev-parse HEAD)" = 'a60613e7f4029799c878eca0b7da825f774e4f46'
-          test "$(git -C dns-source hash-object internal/server/server.go)" = '138f46e1ac49d8ccdb3fae05a41cf234e56236b4'
+          test "$(git -C dns-source rev-parse HEAD)" = '9a2cdecc3b47c7953ff3a987c18217274ebf49fc'
+          test "$(git -C dns-source hash-object internal/server/server.go)" = 'e5cf4426cc884a0414515275f87c68d2502e4591'
           test "$(git -C dns-source hash-object README.md)" = '8a8a313a77a1c4da4bc4d0d4eeea17a5a4ee9a7f'
           grep -Fq 'mux.HandleFunc("GET /healthz"' dns-source/internal/server/server.go
           grep -Fq 'w.Header().Set("Content-Type", "text/plain; charset=utf-8")' dns-source/internal/server/server.go
