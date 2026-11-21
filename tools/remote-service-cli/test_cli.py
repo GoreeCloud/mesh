@@ -55,5 +55,14 @@ class CLIContractTests(unittest.TestCase):
         with self.assertRaises(Exception):
             obj.redirect_request(None, None, 302, "Moved", {}, "https://attacker.invalid")
 
+    def test_auth_check_without_credential_fails_closed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, XDG_CONFIG_HOME=tmp)
+            cp = subprocess.run([sys.executable, str(SCRIPT), "auth-check", "vikunja"],
+                                env=env, capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(cp.returncode, 0)
+            self.assertIn("No private credential", cp.stderr)
+
 if __name__ == "__main__":
     unittest.main()
