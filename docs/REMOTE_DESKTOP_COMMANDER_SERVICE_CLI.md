@@ -20,7 +20,7 @@ This is a real technical implementation priority, not proof that every applicati
 
 ## Actual deployment and runtime inventory
 
-The authorized VPS is `goreecloud-vps-mesh` on Debian 13 Linux. Remote Desktop Commander listed this VPS and the personal laptop online when inspected. The installed operator wrapper is `~/.local/bin/gc-services` (Python standard library; executable mode 0755), with a pre-existing `~/.local/bin/stirling-pdf` wrapper for PDF operations. The public GitHub repository is `GoreeCloud/mesh`; the implementation initially lives in [draft PR #112](https://github.com/GoreeCloud/mesh/pull/112), not automatically on protected `main`.
+The authorized VPS is `goreecloud-vps-mesh` on Debian 13 Linux. Remote Desktop Commander listed this VPS and the personal laptop online when inspected. The installed operator wrapper is `~/.local/bin/gc-services` (Python standard library; executable mode 0755), with a pre-existing `~/.local/bin/stirling-pdf` wrapper for PDF operations, now also preserved as reviewed source under `tools/remote-service-cli/stirling-pdf.py` in draft PR #112. The public GitHub repository is `GoreeCloud/mesh`; the implementation initially lives in [draft PR #112](https://github.com/GoreeCloud/mesh/pull/112), not automatically on protected `main`.
 
 | Service | Observed runtime | CLI capability / authentication | Acceptance |
 | --- | --- | --- | --- |
@@ -129,7 +129,7 @@ Any payload and output examples are procedural patterns, not evidence the corres
 Tests performed on the authorized VPS with Python 3.13.5:
 
 - `python3 -m py_compile ~/.local/bin/gc-services` succeeded.
-- Eleven isolated Python unit/transport tests passed: fixed-path scope, double-decoded traversal rejection, no automatic redirect, write confirmation gate, private TTY requirement, missing credential denial, dry-run behavior, simulated Vikunja bearer POST JSON, Plane API-key GET, AdGuard Basic GET, and owner-only response file/no overwrite.
+- Thirteen isolated Python unit/transport tests passed: fixed-path scope, double-decoded traversal rejection, no automatic redirect, write confirmation gate, private TTY requirement, missing credential denial, dry-run behavior, simulated Vikunja bearer POST JSON, Plane API-key GET, AdGuard Basic GET, owner-only response file/no overwrite, and Stirling's private token/URL guards.
 - HTTP checks returned 200 for Vikunja v1/v2 public info, Plane web, and Stirling PDF public status; 401 for unauthenticated Plane v1 current user and host-loopback AdGuard status; 404 for installed Plane v2 current user.
 - Caddy `validate` succeeded without reload. Existing Docker container enumeration and Vikunja container status were read successfully.
 - Dedicated GitHub Actions `VPS service CLI safety checks` passed on the preceding commit; the new head must be rechecked. Other pinned Mesh CI workflows failed on a previous head and must be investigated independently; do not assert a clean overall PR.
