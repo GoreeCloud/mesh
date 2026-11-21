@@ -16,6 +16,7 @@ loader.exec_module(mod)
 class CLIContractTests(unittest.TestCase):
     def test_api_prefix_enforcement(self):
         self.assertEqual(mod.checked_path("vikunja", "/api/v1/projects?per_page=10"), "/api/v1/projects?per_page=10")
+        self.assertEqual(mod.checked_path("vikunja", "/api/v2/info"), "/api/v2/info")
         self.assertEqual(mod.checked_path("plane", "/api/v1/workspaces/test/projects/"), "/api/v1/workspaces/test/projects/")
         self.assertEqual(mod.checked_path("adguard", "/control/status"), "/control/status")
         for service, path in [
@@ -23,6 +24,7 @@ class CLIContractTests(unittest.TestCase):
             ("vikunja", "//attacker.invalid/api/v1/projects"),
             ("vikunja", "/api/v1/../../admin"),
             ("vikunja", "/api/v1/%2e%2e/admin"),
+            ("vikunja", "/api/v1/%252e%252e/admin"),
             ("vikunja", "/api/v1/%2f%2fevil"),
             ("vikunja", "/api/v1/users#fragment"),
             ("plane", "/control/status"),
@@ -49,6 +51,20 @@ class CLIContractTests(unittest.TestCase):
                             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
         self.assertNotEqual(cp.returncode, 0)
         self.assertIn("private interactive VPS terminal", cp.stderr)
+
+    def test_api_dry_run_without_credentials(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, XDG_CONFIG_HOME=tmp)
+            cp = subprocess.run([sys.executable, str(SCRIPT), "api", "vikunja", "POST",
+                                 "/api/v1/projects", "--dry-run"],
+                                env=env, capture_output=True, text=True, timeout=5)
+            self.assertEqual(cp.returncode, 0)
+            self.assertIn("no request sent", cp.stdout)
+            cp = subprocess.run([sys.executable, str(SCRIPT), "api", "vikunja", "POST",
+                                 "/api/v1/%252e%252e/admin", "--dry-run"],
+                                env=env, capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(cp.returncode, 0)
 
     def test_no_automatic_redirects(self):
         obj = mod.NoRedirect()
