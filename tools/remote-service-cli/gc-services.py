@@ -99,7 +99,13 @@ def checked_path(service, path):
     if not path.startswith(prefixes):
         fail("API path is outside the service's permitted prefix.")
     parts = urllib.parse.urlsplit(path)
-    decoded = urllib.parse.unquote(parts.path)
+    decoded = parts.path
+    # Upstream routers may decode multiple times; reject ambiguous traversal.
+    for _ in range(3):
+        next_value = urllib.parse.unquote(decoded)
+        if next_value == decoded:
+            break
+        decoded = next_value
     if (parts.scheme or parts.netloc or parts.fragment or
         "\\" in decoded or "//" in decoded or ".." in decoded or
         any(ord(ch) < 32 for ch in decoded) or
@@ -312,6 +318,11 @@ def main():
         if args.service != "stirling":
             checked_path(args.service, args.path)
         if args.dry_run:
+            if args.service == "stirling":
+                if args.method not in {"GET", "POST", "PUT", "PATCH", "DELETE"} or not args.path.startswith("/api/v1/") or ".." in args.path:
+                    fail("Stirling dry-run path or method is invalid.")
+            if args.method in {"GET", "HEAD"} and args.data_file:
+                fail("GET and HEAD must not include a request body.")
             if args.data_file:
                 if not args.data_file.is_file() or args.data_file.stat().st_size > 2 * 1024 * 1024:
                     fail("Payload must be an existing JSON file at most 2 MiB.")
@@ -330,7 +341,7 @@ def main():
                 fail("Use 'stirling-pdf compress/merge' for PDF file processing.")
             if args.method == "HEAD":
                 fail("Stirling wrapper does not support HEAD.")
-            if not args.path.startswith("/api/v1/"):
+            if not args.path.startswith("/api/v1/") or ".." in args.path or "://" in args.path or "#" in args.path or any(ord(ch) < 32 for ch in args.path):
                 fail("Invalid Stirling API path.")
             print(run([str(Path.home() / ".local/bin" / "stirling-pdf"), "api", args.method, args.path]))
         else:
