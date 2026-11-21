@@ -50,7 +50,7 @@ Caddy `routes` intentionally shows only site-block names, not passwords or compl
 
 Read [VPS Service CLI Through Remote Desktop Commander](../../docs/REMOTE_DESKTOP_COMMANDER_SERVICE_CLI.md) for the runtime matrix, interim Plane/Vikunja ownership, private credential lifecycle, data handling, API v1/v2 version differences, verification evidence, production safety gates and follow-up priorities.
 
-The companion `test_cli.py` and `test_api_transport.py` tests cover URL scoping, guarded writes and an isolated loopback fixture with synthetic bearer/API-key/Basic authentication and secure output; **no real production record writes** are exercised by these tests. Run with `python3 -m unittest discover -v -s tools/remote-service-cli -p 'test*.py'`.
+The source-controlled `stirling-pdf.py` is the exact temporary wrapper installed on VPS Mesh; its separate owner-private token file is never stored in GitHub. The companion `test_cli.py`, `test_api_transport.py`, and `test_stirling_cli.py` tests cover URL scoping, guarded writes and an isolated loopback fixture with synthetic bearer/API-key/Basic authentication and secure output; **no real production record writes** are exercised by these tests. Run with `python3 -m unittest discover -v -s tools/remote-service-cli -p 'test*.py'`.
 
 ## Extension and acceptance
 
