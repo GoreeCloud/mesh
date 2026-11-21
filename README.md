@@ -213,3 +213,7 @@ Before implementation details or release status can be asserted, resolve:
 ## License
 
 The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
+
+## Optional VPS operator CLI (development)
+
+A local, opt-in [service CLI adapter](tools/remote-service-cli/README.md) and [verified operating reference](docs/REMOTE_DESKTOP_COMMANDER_SERVICE_CLI.md) supports fixed-origin API access to Vikunja, Plane and AdGuard Home through Remote Desktop Commander, delegates Stirling PDF operations to an existing private wrapper, and provides read-only Caddy inspection/validation plus guarded reload. This is **not** a deployed Mesh integration fabric. Credential enrollment, authenticated writes, restore readiness, and live Caddy changes have not been accepted as production-ready.
