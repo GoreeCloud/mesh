@@ -3,7 +3,7 @@
 This opt-in, local operator tool is a temporary adapter maintained in **GoreeCloud/mesh**. It does not claim deployed GoreeCloud Mesh infrastructure, persistent agents, working production backups, or general cross-product authorization. Source: `tools/remote-service-cli/gc-services.py`. Python standard library only; no new listeners, cron jobs, daemon or Docker changes.
 
 ## Install (authorized VPS user only)
-Copy the reviewed Python script to `/home/ladamian/.local/bin/gc-services` and set mode 0755. Run via Desktop Commander on device `goreecloud-vps-mesh`, or in an interactive SSH terminal. Only `ladamian` and its existing Docker group should run administrative commands; Docker group has effectively root-equivalent powers.
+Copy the reviewed Python script to `~/.local/bin/gc-services` and set mode 0755. Run via Desktop Commander on device `goreecloud-vps-mesh`, or in an interactive SSH terminal. Only `ladamian` and its existing Docker group should run administrative commands; Docker group has effectively root-equivalent powers.
 
 ## Commands
 
