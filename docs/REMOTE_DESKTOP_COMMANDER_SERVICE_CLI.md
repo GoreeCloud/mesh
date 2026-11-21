@@ -67,7 +67,7 @@ ChatGPT / owner command
 - Approved URL origins are compiled into the operator adapter; user-supplied arbitrary origins are not permitted. API paths are confined to the service's namespace; suspicious fragments, traversal, double encoding, control characters, and untrusted host/scheme components are rejected.
 - GET and HEAD are read operations. POST/PUT/PATCH/DELETE require explicit `--confirm-write` and a supported endpoint. This switch is a *guard*, not permission to perform destructive, bulk, public, or irreversible changes.
 - `--dry-run` performs offline method/path/JSON-file validation **without contacting the service**. It cannot certify real API permissions, payload schema, persistence, or rollback.
-- JSON payload files are at most 2 MiB and never placed into command arguments; API responses are limited to 8 MiB. A private `--output` destination is created mode `0600` without overwriting an existing file. Avoid printing sensitive response bodies to ChatGPT.
+- JSON payload files are at most 2 MiB and never placed into command arguments; API responses are limited to 8 MiB. A private `--output` destination is created mode `0600` without overwriting an existing file. Authenticated API response bodies are suppressed by default. Supply `--show-data` deliberately to display private content, or `--output` for a private file; avoid printing sensitive response bodies to ChatGPT.
 - Caddy reload requires explicit confirmation and passes syntax validation first. It writes a snapshot of the **current candidate file**, not a guarantee of restoring the previously active runtime state. Check real routing/TLS after any authorized change; have a recovery snapshot and tested rollback independently.
 - Docker log capture requires `--output` and saves a bounded tail in a private `0600` file, never plain standard output. Logs may still contain secrets; inspect/redact before sharing. Docker status is restricted to a known local container name and fields that do not expose environment, mounts, or credentials.
 
@@ -100,8 +100,8 @@ gc-services auth-check stirling
 
 # Authorized reads after enrollment
 gc-services api vikunja GET /api/v1/projects --output ./vikunja-projects.json
-gc-services api plane GET /api/v1/workspaces/WORKSPACE_SLUG/projects/
-gc-services api adguard GET /control/status
+gc-services api plane GET /api/v1/workspaces/WORKSPACE_SLUG/projects/ --output ./plane-projects.json
+gc-services api adguard GET /control/status --output ./adguard-status.json
 
 # Validate a prospective write without sending it
 gc-services api vikunja POST /api/v1/projects --data-file ./new-project.json --dry-run
