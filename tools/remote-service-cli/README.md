@@ -38,6 +38,8 @@ gc-services logout vikunja
 
 **Warning:** Mutating API calls and Caddy reloads can alter live state. Verify target, backup/recovery, permission scope, API request schema and expected impact *before invoking* any example write. The examples are usage patterns, not tests or pre-authorized changes. Plane endpoint paths are version-dependent. For Stirling upload/multipart use its previously installed `stirling-pdf` wrapper.
 
+The separately installed `stirling-pdf api` command is now **private by default**: a fixed-origin API GET prints only status, not response contents. Use `--show-data` only for explicitly authorized private terminal display, or `--output ./private.json` for an owner-only non-overwriting response file. Any POST/PUT/PATCH/DELETE requires `--confirm-write` after checking scope and reversibility; a confirmation flag is not a bypass of service permissions or chat authorization. Both CLI tools keep tokens in owner-only files and do not pass token values as process arguments.
+
 ## Authentication and data policy
 
 Vikunja API tokens use `Authorization: Bearer`; Plane keys use `X-API-Key`; AdGuard uses HTTP Basic **over loopback only**. Enter secrets only through private TTY prompts after creating scoped credentials in the service. Successful login checks an authenticated endpoint before storing. Files live at `~/.config/goreecloud/service-cli/<service>.json` (0700 dir/0600 file), never in repository, process args, logs or ChatGPT conversation. Stirling retains its separate private credential/header.
