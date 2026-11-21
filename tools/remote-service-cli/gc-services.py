@@ -205,15 +205,18 @@ def caddy(args):
         with os.fdopen(fd, "wb") as out, CADDYFILE.open("rb") as src:
             shutil.copyfileobj(src, out)
         run(prefix + ["reload", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"])
-        print("Caddy reload command succeeded; independently verify routes and TLS. Backup:", backup)
+        print("Caddy reload command succeeded; independently verify routes and TLS. Candidate snapshot:", backup)
 
 def main():
     ap = argparse.ArgumentParser(description="Local private VPS service CLI; no passwords on command line")
     sp = ap.add_subparsers(dest="command", required=True)
     sp.add_parser("list", help="List supported services and observed Docker containers")
     sp.add_parser("doctor", help="Read-only public health, credentials present and Caddy syntax")
-    p = sp.add_parser("login", help="Securely enroll an API credential interactively")
-    p.add_argument("service", choices=sorted(SERVICES))
+    for name, helptext in (("login", "Privately enroll a scoped credential"),
+                            ("auth-check", "Validate an enrolled credential without revealing user data"),
+                            ("logout", "Remove local credential; does not revoke the server key")):
+        p = sp.add_parser(name, help=helptext)
+        p.add_argument("service", choices=sorted(SERVICES) + ["stirling"])
     p = sp.add_parser("api", help="Authorized REST read or explicitly approved write")
     p.add_argument("service", choices=sorted(SERVICES) + ["stirling"])
     p.add_argument("method", choices=sorted(METHODS))
@@ -242,8 +245,20 @@ def main():
             caddy(argparse.Namespace(action="validate", confirm_write=False))
         except SystemExit as exc:
             print("Caddy validation failed:", exc)
-    elif args.command == "login":
-        login(args)
+    elif args.command in ("login", "auth-check", "logout"):
+        if args.service == "stirling":
+            print(run([str(Path.home() / ".local/bin" / "stirling-pdf"),
+                       {"login": "login", "auth-check": "auth-check", "logout": "logout"}[args.command]]))
+        elif args.command == "login":
+            login(args)
+        elif args.command == "auth-check":
+            request(args.service, "GET", SERVICES[args.service][3],
+                    cfg=credential(args.service), quiet=True)
+            print("Authenticated API read succeeded; response content suppressed.")
+        else:
+            credential(args.service)
+            private_file(args.service).unlink()
+            print("Local credential deleted; server-issued access was NOT revoked.")
     elif args.command == "caddy":
         caddy(args)
     elif args.command == "api":
