@@ -210,6 +210,10 @@ Before implementation details or release status can be asserted, resolve:
 
 **Change-control note:** This README captures current founder product direction and reflects the separately verified correction of the canonical five-MIPS requirement. It does not itself approve final technical architecture, demonstrate functioning integrations, or certify a release.
 
+## Third-party NetBird operations (not GoreeCloud VPN)
+
+The [NetBird ownership and separation record](docs/third-party-netbird-ownership.md) explains the operational boundary between the **third-party NetBird** server/CLI and **GoreeCloud VPN**, a separate first-party product. Reviewed non-secret NetBird deployment files and the `gc-netbird` Remote Desktop Commander API adapter live in [deploy/netbird](deploy/netbird/README.md) and [tools/netbird-cli](tools/netbird-cli/README.md). This tooling integrates a third-party service; it is **not** GoreeCloud VPN application source or evidence of GoreeCloud VPN deployment.
+
 ## License
 
 The GoreeCloud-controlled source and documentation in this repository are provided under the [Apache License, Version 2.0](LICENSE). Third-party product names, trademarks and referenced technologies remain subject to their respective owners' rights. This license does not imply permission to access real GoreeCloud accounts, services, infrastructure, or protected data.
