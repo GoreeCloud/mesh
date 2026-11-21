@@ -20,7 +20,7 @@ This is a real technical implementation priority, not proof that every applicati
 
 ## Actual deployment and runtime inventory
 
-The authorized VPS is `goreecloud-vps-mesh` on Debian 13 Linux. Remote Desktop Commander listed this VPS and the personal laptop online when inspected. The installed operator wrapper is `~/.local/bin/gc-services` (Python standard library; executable mode 0755), with a pre-existing `~/.local/bin/stirling-pdf` wrapper for PDF operations, now also preserved as reviewed source under `tools/remote-service-cli/stirling-pdf.py` in draft PR #112. The public GitHub repository is `GoreeCloud/mesh`; the implementation initially lives in [draft PR #112](https://github.com/GoreeCloud/mesh/pull/112), not automatically on protected `main`.
+The authorized VPS is `goreecloud-vps-mesh` on Debian 13 Linux. Remote Desktop Commander listed this VPS and the personal laptop online when inspected. The installed operator wrapper is `~/.local/bin/gc-services` (Python standard library; executable mode 0755), with a pre-existing `~/.local/bin/stirling-pdf` wrapper for PDF operations, now also preserved as reviewed source under `tools/remote-service-cli/stirling-pdf.py` in draft PR #113. The public GitHub repository is `GoreeCloud/mesh`; the implementation initially lives in [draft PR #113](https://github.com/GoreeCloud/mesh/pull/113), not automatically on protected `main`.
 
 | Service | Observed runtime | CLI capability / authentication | Acceptance |
 | --- | --- | --- | --- |
@@ -158,7 +158,7 @@ The wrapper itself has no daemon, network listener, systemd unit, scheduled job 
 - [Remote-device access instruction](https://docs.google.com/document/d/1gmK9yepqk4Yganm9HpfKANOGL4CEvaEz/edit)
 - [“Document This” protocol](https://docs.google.com/document/d/1CwGK2fGh_vVW7QDEd0sX6jMOMTQKefQ1/edit)
 - [GoreeCloud Mesh repository](https://github.com/GoreeCloud/mesh)
-- [Draft implementation PR #112](https://github.com/GoreeCloud/mesh/pull/112)
+- [Draft implementation PR #113](https://github.com/GoreeCloud/mesh/pull/113)
 - [Vikunja API documentation](https://vikunja.io/docs/api-documentation/)
 - [Plane API v1 documentation](https://developers.plane.so/api-reference/introduction)
 - [AdGuard Home OpenAPI](https://github.com/AdguardTeam/AdGuardHome/blob/master/openapi/openapi.yaml)
