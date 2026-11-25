@@ -225,3 +225,6 @@ The GoreeCloud-controlled source and documentation in this repository are provid
 
 
 **First-party Gateway source correction:** The current Gateway Go/Caddy source replaces the retired cmd/console contract; the pinned Mesh test builds the actual root Go module and React assets, checks GET /api/health, bearer-gated GET /api/status, hostile Host handling and process restart in a disposable loopback environment. It does not apply any ingress route, TLS certificate, DNS record or VPS configuration.
+
+
+**November 25 first-party VPN source refresh:** The independent Mesh read-only liveness contract is now pinned to GoreeCloud/VPN commit `a1087842ffc904eb20bbfc9c1e00fa6d02ffc49a`, with the current reviewed API handler Git blob. Hosted disposable Go smoke tests additionally check strict Content-Type rejection and an explicit empty administrator peer array. These are local process-contract tests, **not** a production Mesh connector, device VPN session, live revocation enforcement, or proof of a completed Identity integration.

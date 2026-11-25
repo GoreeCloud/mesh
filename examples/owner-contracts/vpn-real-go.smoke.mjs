@@ -45,14 +45,14 @@ async function stopVPN(child) {
     await Promise.race([new Promise(ok => child.once('exit', ok)), sleep(850)]);
   }
 }
-function loopback(port, path = '/healthz', token = '', method = 'GET', payload = null) {
+function loopback(port, path = '/healthz', token = '', method = 'GET', payload = null, contentType = 'application/json') {
   assert.ok(['/healthz', '/v1/peers', '/v1/info'].includes(path));
   return new Promise((yes, no) => {
     const headers = {};
     if (token) headers.Authorization = 'Bearer ' + token;
     const body = payload === null ? undefined : JSON.stringify(payload);
     if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
+      headers['Content-Type'] = contentType;
       headers['Content-Length'] = Buffer.byteLength(body,'utf8');
     }
     const req = httpRequest({
@@ -154,9 +154,16 @@ async function main() {
     assert.equal(viewerInfo.status,200);
     assert.equal(JSON.parse(viewerInfo.body).access_role,'viewer');
     assert.equal(JSON.parse(viewerInfo.body).tunnel_operational,false);
+    // Admin empty inventories use an explicit array, not ambiguous null.
+    assert.deepEqual(JSON.parse((await loopback(port,'/v1/peers',token)).body).peers,[]);
     const { publicKey } = generateKeyPairSync('x25519');
     const rawPublic = publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
     assert.equal(rawPublic.length,44);
+    const badMedia = await loopback(port,'/v1/peers',token,'POST',{
+      name:'mesh-synthetic-device',public_key:rawPublic
+    },'application/jsonp');
+    assert.equal(badMedia.status,415,'JSON-like media prefix bypassed strict source handler');
+    assert.deepEqual(JSON.parse((await loopback(port,'/v1/peers',token)).body).peers,[]);
     const enrollment = await loopback(port,'/v1/peers',token,'POST',{
       name:'mesh-synthetic-device',public_key:rawPublic
     });
