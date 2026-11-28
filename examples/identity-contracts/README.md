@@ -1,8 +1,10 @@
 # Identity-verified synthetic Mesh status read — isolated acceptance
 
+**November 27, 2026 — Standalone Identity source is unavailable. The former source-pinned workflow was removed; the local injected-verifier regressions do not prove a live Identity authorization path. Identity remains a required MIPS responsibility.**
+
 **Status:** Development-only source-integrity and authorization contract. **Not** a deployed GoreeCloud Identity connector, live Keycloak integration, real Wardveil user access, remote JWT verification service, or production authorization.
 
-The [isolated Identity contract workflow](../../.github/workflows/identity-mesh-contract.yml) checks out the authorized GoreeCloud Identity source at immutable commit `a2bcc8e972b794738152711bcfc32a5e68222e4f`. Before running, it verifies the source identity and Git blobs of the actual `ResourceAuthorizer`, token verifier, policy implementation and the `PyJWT[crypto]==2.15.1` dependency declaration. It runs the original Identity Python verifier, not a reimplemented JWT decoder. Python cryptography is Identity's existing third-party development dependency; a complete supply-chain audit and license approval are **not** claimed.
+The former isolated Identity contract workflow checks out the authorized GoreeCloud Identity source at immutable commit `a2bcc8e972b794738152711bcfc32a5e68222e4f`. Before running, it verifies the source identity and Git blobs of the actual `ResourceAuthorizer`, token verifier, policy implementation and the `PyJWT[crypto]==2.15.1` dependency declaration. It runs the original Identity Python verifier, not a reimplemented JWT decoder. Python cryptography is Identity's existing third-party development dependency; a complete supply-chain audit and license approval are **not** claimed.
 
 This refreshed source pin includes Identity's strict runtime-typed policy principal validation. The isolated fixture still tests the signed-token authorization boundary against the actual Identity resource authorizer; the distinct negative type-confusion cases are tested in the Identity repository's `test_policy.py`. It does **not** implement a deployed cross-product authorization service.
 

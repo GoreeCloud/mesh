@@ -1,5 +1,7 @@
 # Wardveil health contract — transport-injected acceptance fixture
 
+**November 27, 2026 — Retired or unavailable Tasks, Memos, DNS, Gateway, VPN, Calendar, DAV and OpenRoom source descriptions below are historical where the original repository is unavailable. Only retained source-owned Wardveil CI is active; other local fixture passes prove synthetic behavior only.**
+
 **Maturity:** Local development acceptance fixture only. No HTTP client, daemon, listener, connected Wardveil process, token, endpoint configuration, production authorization or deployment.
 
 ## Verified source boundary (2026-11-09)

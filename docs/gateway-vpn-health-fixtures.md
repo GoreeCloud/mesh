@@ -1,5 +1,7 @@
 # Mesh — synthetic Gateway and VPN health contracts (development)
 
+**November 27, 2026 — Gateway and VPN repositories were deleted on November 27, 2026. The source-owned workflows were removed; all source descriptions below are historical evidence only, and any local synthetic fixture is not a live connector.**
+
 **Status:** Isolated transport-injected source contract fixtures; no deployment, networking, credentials, real remote transport, or production status claims. These fixtures extend the existing dependency-free Mesh owner-contract tests, without modifying active products.
 
 ## Verified source-owned behavior — November 9, 2026
