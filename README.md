@@ -11,8 +11,10 @@
 | Prepared | October 25, 2026 |
 | Version | Not assigned |
 | Canonical repository | [`GoreeCloud/mesh`](https://github.com/GoreeCloud/mesh) |
-| Related platform-family repository | [`GoreeCloud/MIPS`](https://github.com/GoreeCloud/MIPS) |
+| Related platform-family governance | Canonical five-MIPS requirement (Google Drive); standalone repository retired |
 | Document location | `README.md` |
+
+**Source availability (November 27, 2026):** DNS, Gateway, VPN, Calendar and standalone Identity source workflows are no longer runnable because their repositories are unavailable. Their local synthetic fixtures remain regression tests only, not current source verification. Wardveil source-owned CI remains active. No missing owner is treated as authorized or healthy.
 
 **Engineering checkpoint:** [Evidence-based stability and release gates](docs/stability-gates.md) define safe implementation sequencing, ownership boundaries, and evidence required before claiming an operational Mesh capability.
 
@@ -20,7 +22,7 @@
 
 **Source-owned development integration:** [Wardveil isolated health and scoped status v1 contracts](examples/owner-contracts/README.md) are exercised against the **actual SHA-pinned Wardveil Go development executable** in isolated hosted CI. Wardveil PR #26 added an opt-in third status-only bearer and source-observed status timestamp; Mesh PR #26 verifies the dedicated `/v1/status` contract, strict projection and header/body limits, denial of unauthorized event access, token rotation across controlled restart, outage/recovery, and in-memory private outcome diagnostics. Existing `/healthz` tests remain as a non-regression control. These are **not** a deployed service or a production connector: there is still no GoreeCloud Identity-based actor/tenant authorization, network TLS and process identity assurance, production secret lifecycle, privacy-policy acceptance or signed Stable release. [Mesh stability gates](docs/stability-gates.md) remain open.
 
-**Identity development acceptance:** [Pinned Identity signed-token gate](examples/identity-contracts/README.md) checks the actual source-owned Python ResourceAuthorizer at immutable Identity commit `703cb1b55f29e849d90f3281bb582cf33ee78804` with disposable RSA tokens before a synthetic Mesh status read. It verifies issuer, resource audience, OAuth client, signed tenant, scope, role, deny priority and expiry and cannot override the independent Mesh or owner permit. It does **not** connect Keycloak sessions or authenticated user identities to Wardveil's Go service.
+**Identity development acceptance (historical):** The former source-pinned Identity verifier is unavailable. Local injected-verifier tests remain synthetic only; live Identity authorization remains an open release gate.
 
 **Process deadline fixture:** [Fixed-code isolated synthetic owner](examples/synthetic/README.md) demonstrates a private Node child process with strictly bounded concurrent subprocesses, output and deadlines. Stalled or crashing child work can be forcibly terminated and capacity is retained until actual process closure. **Not an OS sandbox** or a deployable multi-tenant owner runtime; see [worker isolation issue #34](https://github.com/GoreeCloud/mesh/issues/34).
 
@@ -129,14 +131,14 @@ This diagram expresses **conceptual responsibilities only**, not a deployed topo
 
 ## 6. Relationship to the Mandatory Integrated Platform Systems (MIPS)
 
-**Founder direction, October 25, 2026:** GoreeCloud Mesh is designated as **one of five Mandatory Integrated Platform Systems (MIPS)**, associated with [`GoreeCloud/MIPS`](https://github.com/GoreeCloud/MIPS). The founder identifies the five platforms as:
+**Founder direction, October 25, 2026:** GoreeCloud Mesh is designated as **one of five Mandatory Integrated Platform Systems (MIPS)**; the standalone MIPS repository was retired on November 27, 2026. The founder identifies the five platforms as:
 
 | Platform | Designated repository | Distinct domain |
 | --- | --- | --- |
 | **GoreeCloud UI** | [`GoreeCloud/gc-ui`](https://github.com/GoreeCloud/gc-ui) | Unified interface, design and user experience authority |
 | **Wardveil** | [`GoreeCloud/wardveil`](https://github.com/GoreeCloud/wardveil) | Cybersecurity, threat detection, defense and incident response |
 | **GoreeShield** | [`GoreeCloud/goreeshield`](https://github.com/GoreeCloud/goreeshield) | Privacy management, privacy controls and data-handling protections |
-| **GoreeCloud Identity** | [`GoreeCloud/identity`](https://github.com/GoreeCloud/identity) | Identity management, authentication and identity-related integration |
+| **GoreeCloud Identity** | No current standalone source repository; required responsibility remains | Identity management, authentication and identity-related integration |
 | **GoreeCloud Mesh** | [`GoreeCloud/mesh`](https://github.com/GoreeCloud/mesh) | Integration, interoperability, communication, orchestration and cross-platform control |
 
 Mesh **coordinates** approved interfaces across the other platforms; it does **not** replace their respective authorities, independently grant identities or permissions, define privacy policy, implement malware defense, or become the UI design authority. Each owning application or system remains responsible for enforcing its own protected operations.
@@ -202,7 +204,6 @@ Before implementation details or release status can be asserted, resolve:
 ## 11. Related Records
 
 - [GoreeCloud Mesh repository](https://github.com/GoreeCloud/mesh) — owner-designated product repository.
-- [MIPS repository](https://github.com/GoreeCloud/MIPS) — owner-designated MIPS group repository.
 - `GoreeCloud/GoreeCloud-Instructions.md` — governing GoreeCloud operating instructions (Google Drive).
 - `GoreeCloud/Instructions/GoreeCloud_Document_This_Documentation_Protocol.md` — founder-directed documentation protocol (Google Drive).
 - `GoreeCloud/Requirements/Requirement - Universal Integration and Control Support.md` — ecosystem interoperability and integration requirement (Google Drive).

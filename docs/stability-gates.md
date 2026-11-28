@@ -1,5 +1,7 @@
 # GoreeCloud Mesh — Stability and Release Gates
 
+**November 27, 2026 — Current source availability supersedes historical evidence below. DNS, Gateway, VPN, Calendar and standalone Identity CI checkouts are retired or unavailable; local synthetic tests cannot replace real-source acceptance. Wardveil source CI remains active; all real authorization, privacy, security and release gates remain in force.**
+
 | Field | Value |
 | --- | --- |
 | Status | Verified local development baseline plus proposed real-integration acceptance gates; no production claim |
